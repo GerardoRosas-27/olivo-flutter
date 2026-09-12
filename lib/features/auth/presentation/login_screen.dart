@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/data/providers.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/form_gap.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -67,7 +68,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   'Entra con tu correo (sin contraseña). La sesión queda en este dispositivo.',
                   style: TextStyle(color: OlivoColors.subtle, fontSize: 13),
                 ),
-                const SizedBox(height: 16),
+                const FormGap(height: 16),
                 TextField(
                   controller: _email,
                   keyboardType: TextInputType.emailAddress,
@@ -82,7 +83,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 8),
                   Text(_error!, style: const TextStyle(color: OlivoColors.danger)),
                 ],
-                const SizedBox(height: 16),
+                const FormGap(height: 16),
                 FilledButton(
                   onPressed: _busy ? null : _submit,
                   child: _busy

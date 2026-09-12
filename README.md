@@ -71,7 +71,7 @@ Descargas en el deploy:
 flutter build apk --release
 ```
 
-Release GitHub: tag `v1.0.0-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
+Release GitHub: tag `v1.0.1-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
 
 ### iOS
 

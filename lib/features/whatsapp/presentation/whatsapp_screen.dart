@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/data/providers.dart';
 import '../../../core/models/models.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/form_gap.dart';
 import '../../../core/utils/message.dart';
 
 class WhatsappScreen extends ConsumerStatefulWidget {
@@ -84,7 +85,7 @@ class _WhatsappScreenState extends ConsumerState<WhatsappScreen> {
                 'Placeholders: {nombre} {novios} {fecha} {lugar} {enlace}',
                 style: TextStyle(color: OlivoColors.muted, fontSize: 12),
               ),
-              const SizedBox(height: 8),
+              const FormGap(),
               TextField(
                 controller: _tpl,
                 maxLines: 12,
@@ -95,7 +96,7 @@ class _WhatsappScreenState extends ConsumerState<WhatsappScreen> {
               ),
               const SizedBox(height: 20),
               Text('Enviar a invitados', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
+              const FormGap(),
               ...guests.where((g) => !g.isDiscarded).map((g) {
                 final msg = buildGuestMessage(
                   w.copyWith(whatsappTemplate: _tpl.text),

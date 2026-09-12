@@ -7,6 +7,7 @@ import '../../../core/data/providers.dart';
 import '../../../core/models/models.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/message.dart';
+import '../../../core/widgets/form_gap.dart';
 
 class InvitadosScreen extends ConsumerStatefulWidget {
   const InvitadosScreen({super.key});
@@ -25,26 +26,47 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        insetPadding: kFormDialogInset,
         title: Text(guest == null ? 'Nuevo invitado' : 'Editar invitado'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: name, decoration: const InputDecoration(labelText: 'Nombre')),
-              TextField(controller: phone, decoration: const InputDecoration(labelText: 'Teléfono')),
-              TextField(
-                controller: party,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Aforo / party size'),
-              ),
-              TextField(controller: group, decoration: const InputDecoration(labelText: 'Grupo')),
-              TextField(controller: notes, decoration: const InputDecoration(labelText: 'Notas')),
-            ],
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                    controller: name,
+                    decoration: const InputDecoration(labelText: 'Nombre')),
+                const FormGap(),
+                TextField(
+                    controller: phone,
+                    decoration: const InputDecoration(labelText: 'Teléfono')),
+                const FormGap(),
+                TextField(
+                  controller: party,
+                  keyboardType: TextInputType.number,
+                  decoration:
+                      const InputDecoration(labelText: 'Aforo / party size'),
+                ),
+                const FormGap(),
+                TextField(
+                    controller: group,
+                    decoration: const InputDecoration(labelText: 'Grupo')),
+                const FormGap(),
+                TextField(
+                    controller: notes,
+                    decoration: const InputDecoration(labelText: 'Notas')),
+              ],
+            ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Guardar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Guardar')),
         ],
       ),
     );
@@ -81,30 +103,36 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
+        insetPadding: kFormDialogInset,
         title: Text(guest.name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 220,
-              height: 220,
-              child: QrImageView(
-                data: url,
-                version: QrVersions.auto,
-                backgroundColor: OlivoColors.bg,
-                eyeStyle: const QrEyeStyle(
-                  eyeShape: QrEyeShape.square,
-                  color: OlivoColors.fg,
-                ),
-                dataModuleStyle: const QrDataModuleStyle(
-                  dataModuleShape: QrDataModuleShape.square,
-                  color: OlivoColors.fg,
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: SizedBox(
+                  width: 220,
+                  height: 220,
+                  child: QrImageView(
+                    data: url,
+                    version: QrVersions.auto,
+                    backgroundColor: OlivoColors.bg,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: OlivoColors.fg,
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: OlivoColors.fg,
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            SelectableText(url, style: const TextStyle(fontSize: 12)),
-          ],
+              const FormGap(),
+              SelectableText(url, style: const TextStyle(fontSize: 12)),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -114,7 +142,9 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
             },
             child: const Text('Copiar enlace'),
           ),
-          FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cerrar')),
         ],
       ),
     );
@@ -200,8 +230,10 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
                       PopupMenuItem(value: 'edit', child: Text('Editar')),
                       PopupMenuItem(value: 'qr', child: Text('QR / enlace')),
                       PopupMenuItem(value: 'sent', child: Text('Marcar enviado')),
-                      PopupMenuItem(value: 'checkin', child: Text('Marcar entrada')),
-                      PopupMenuItem(value: 'regen', child: Text('Regenerar token')),
+                      PopupMenuItem(
+                          value: 'checkin', child: Text('Marcar entrada')),
+                      PopupMenuItem(
+                          value: 'regen', child: Text('Regenerar token')),
                       PopupMenuItem(value: 'discard', child: Text('Descartar')),
                     ],
                   ),

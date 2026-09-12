@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/data/providers.dart';
 import '../../../core/models/models.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/form_gap.dart';
 import '../../../core/utils/device_id.dart';
 import '../../../core/utils/message.dart';
 
@@ -134,7 +135,7 @@ class _GuestLandingScreenState extends ConsumerState<GuestLandingScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(wedding.welcomeNote),
-                      const SizedBox(height: 16),
+                      const FormGap(height: 16),
                       if (current == 'unknown')
                         Row(
                           children: [

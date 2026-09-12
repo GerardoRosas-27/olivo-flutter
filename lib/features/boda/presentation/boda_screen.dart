@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/data/providers.dart';
 import '../../../core/models/models.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/form_gap.dart';
 
 class BodaScreen extends ConsumerStatefulWidget {
   const BodaScreen({super.key});
@@ -136,7 +137,7 @@ class _BodaScreenState extends ConsumerState<BodaScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const FormGap(),
               Row(
                 children: [
                   Expanded(
@@ -156,40 +157,40 @@ class _BodaScreenState extends ConsumerState<BodaScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const FormGap(),
               TextField(
                 controller: _f('venueName'),
                 decoration: const InputDecoration(labelText: 'Lugar'),
               ),
-              const SizedBox(height: 12),
+              const FormGap(),
               TextField(
                 controller: _f('venueAddress'),
                 decoration: const InputDecoration(labelText: 'Dirección'),
               ),
-              const SizedBox(height: 12),
+              const FormGap(),
               TextField(
                 controller: _f('venueMapsUrl'),
                 decoration: const InputDecoration(labelText: 'URL de mapas'),
               ),
-              const SizedBox(height: 12),
+              const FormGap(),
               TextField(
                 controller: _f('dressCode'),
                 decoration: const InputDecoration(labelText: 'Código de vestimenta'),
                 maxLines: 2,
               ),
-              const SizedBox(height: 12),
+              const FormGap(),
               TextField(
                 controller: _f('welcomeNote'),
                 decoration: const InputDecoration(labelText: 'Nota de bienvenida'),
                 maxLines: 3,
               ),
-              const SizedBox(height: 12),
+              const FormGap(),
               TextField(
                 controller: _f('story'),
                 decoration: const InputDecoration(labelText: 'Historia de los novios'),
                 maxLines: 4,
               ),
-              const SizedBox(height: 12),
+              const FormGap(),
               TextField(
                 controller: _f('rsvpDeadline'),
                 decoration: const InputDecoration(
@@ -250,6 +251,7 @@ class _BodaScreenState extends ConsumerState<BodaScreen> {
                             ),
                           ],
                         ),
+                        const FormGap(),
                         TextFormField(
                           initialValue: item.title,
                           decoration: const InputDecoration(labelText: 'Título'),
@@ -261,6 +263,7 @@ class _BodaScreenState extends ConsumerState<BodaScreen> {
                             );
                           },
                         ),
+                        const FormGap(),
                         TextFormField(
                           initialValue: item.detail,
                           decoration: const InputDecoration(labelText: 'Detalle'),

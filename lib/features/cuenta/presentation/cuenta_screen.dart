@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/data/providers.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/form_gap.dart';
 
 class CuentaScreen extends ConsumerStatefulWidget {
   const CuentaScreen({super.key});
@@ -49,7 +50,7 @@ class _CuentaScreenState extends ConsumerState<CuentaScreen> {
           ),
           const SizedBox(height: 16),
           Text('URL pública (Railway)', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
+          const FormGap(),
           TextField(
             controller: _baseUrl,
             decoration: const InputDecoration(
@@ -57,7 +58,7 @@ class _CuentaScreenState extends ConsumerState<CuentaScreen> {
               helperText: 'Se usa en enlaces /i/:token y mensajes WhatsApp',
             ),
           ),
-          const SizedBox(height: 8),
+          const FormGap(),
           FilledButton(
             onPressed: () async {
               await ref.read(olivoRepoProvider).setPublicBaseUrl(_baseUrl.text);
