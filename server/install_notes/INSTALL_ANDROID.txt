@@ -1,0 +1,17 @@
+Olivo — Android
+===============
+
+Contenido de este ZIP:
+  - olivo.apk
+  - INSTALL_ANDROID.txt (este archivo)
+
+Instalacion:
+  1. Abre el enlace de descarga en Chrome (no en un WebView interno).
+  2. Si la descarga se pausa: ve a Descargas y reanudala.
+  3. Abre el APK descargado.
+  4. Si Android lo bloquea: Ajustes -> permitir instalar apps de fuentes desconocidas
+     (o Instalar apps desconocidas para Chrome).
+  5. Confirma la instalacion.
+
+Tambien puedes descargar solo el APK desde:
+  /downloads/olivo.apk

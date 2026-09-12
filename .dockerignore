@@ -1,0 +1,28 @@
+# Build artifacts / tooling (keep folders in git; skip Docker context)
+.git
+.dart_tool
+.build
+.pub-cache
+.pub
+build
+coverage
+.idea
+.vscode
+*.iml
+.DS_Store
+dist
+
+# Not needed for Flutter web build (speeds up context)
+android
+ios
+linux
+macos
+windows
+test
+
+# Docs / misc
+README.md
+analysis_options.yaml
+.dockerignore
+Dockerfile
+railway.toml

@@ -1,0 +1,19 @@
+Olivo — iOS
+===========
+
+No hay un IPA firmado instalable en este momento.
+
+iOS requiere:
+  - Un Mac con Xcode
+  - Cuenta Apple Developer (o TestFlight)
+  - flutter build ipa + firma / distribucion App Store o ad-hoc
+
+Este ZIP solo incluye instrucciones. No inventamos ni incluimos un IPA.
+
+Mientras tanto puedes:
+  - Usar la version web (invitacion /i/:token, panel admin en el navegador)
+  - Usar el APK / ZIP de Android en un dispositivo Android
+  - Seguir Releases en GitHub para cuando haya build iOS
+
+Releases:
+  https://github.com/GerardoRosas-27/olivo-flutter/releases
