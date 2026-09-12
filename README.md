@@ -12,7 +12,7 @@ Cada invitado recibe un enlace único (`/i/:token`) con código QR. Desde el pan
 - Envío por WhatsApp con plantilla editable (`{nombre}`, `{novios}`, `{fecha}`, `{lugar}`, `{enlace}`)
 - Confirmación de asistencia (RSVP sí/no)
 - Lista de invitados, grupos y aforo
-- Escáner de puerta (cámara en móvil; token manual en web)
+- Escáner de puerta (cámara QR en móvil y web HTTPS; token manual de respaldo)
 - Detección de enlaces compartidos / clonados (device binding)
 - Login admin **solo con correo** (sin contraseña), sesión local
 - Secciones admin: **Resumen**, **Boda**, **Invitados**, **WhatsApp**, **Escáner**, **Cuenta**
@@ -71,7 +71,7 @@ Descargas en el deploy:
 flutter build apk --release
 ```
 
-Release GitHub: tag `v1.0.1-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
+Release GitHub: tag `v1.0.2-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
 
 ### iOS
 

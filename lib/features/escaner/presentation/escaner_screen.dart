@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/data/providers.dart';
 import '../../../core/models/models.dart';
@@ -26,23 +27,86 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
   StreamSubscription<BarcodeCapture>? _subscription;
   DoorScanResult? _last;
   bool _busy = false;
-  bool _useCamera = !kIsWeb;
+  bool _useCamera = true;
   bool _cameraReady = false;
+  bool _permissionPermanentlyDenied = false;
   String? _cameraError;
   String? _lastRaw;
+
+  /// Browser camera requires a secure context (HTTPS or localhost).
+  bool get _webInsecureContext {
+    if (!kIsWeb) return false;
+    final uri = Uri.base;
+    if (uri.scheme == 'https') return false;
+    final host = uri.host;
+    return host != 'localhost' && host != '127.0.0.1' && host != '::1';
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (_useCamera && !kIsWeb) {
+    if (_useCamera) {
       unawaited(_startCamera());
     }
   }
 
+  Future<bool> _ensureCameraPermission() async {
+    // Web: browser prompts via getUserMedia inside mobile_scanner.
+    // Desktop (macOS/linux/windows): OS dialogs / not permission_handler.
+    if (kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.windows) {
+      return true;
+    }
+
+    var status = await Permission.camera.status;
+    if (status.isGranted || status.isLimited) {
+      _permissionPermanentlyDenied = false;
+      return true;
+    }
+
+    if (status.isPermanentlyDenied) {
+      _permissionPermanentlyDenied = true;
+      return false;
+    }
+
+    status = await Permission.camera.request();
+    if (status.isGranted || status.isLimited) {
+      _permissionPermanentlyDenied = false;
+      return true;
+    }
+
+    _permissionPermanentlyDenied = status.isPermanentlyDenied;
+    return false;
+  }
+
   Future<void> _startCamera() async {
     await _stopCamera();
-    if (!mounted || kIsWeb) return;
+    if (!mounted) return;
+
+    if (_webInsecureContext) {
+      setState(() {
+        _cameraError =
+            'No se pudo abrir la cámara. Pega el enlace a mano. (Se requiere HTTPS)';
+        _cameraReady = false;
+        _permissionPermanentlyDenied = false;
+      });
+      return;
+    }
+
+    final allowed = await _ensureCameraPermission();
+    if (!mounted) return;
+    if (!allowed) {
+      setState(() {
+        _cameraError = _permissionPermanentlyDenied
+            ? 'Permiso de cámara denegado permanentemente. Ábrelo en Ajustes o usa la entrada manual.'
+            : 'Permiso de cámara denegado. Usa «Reintentar permiso» o la entrada manual.';
+        _cameraReady = false;
+      });
+      return;
+    }
 
     final controller = MobileScannerController(
       autoStart: false,
@@ -55,35 +119,40 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
       _controller = controller;
       _cameraError = null;
       _cameraReady = false;
+      _permissionPermanentlyDenied = false;
     });
 
     _subscription = controller.barcodes.listen(_onBarcode);
 
     try {
-      // Requests CAMERA permission at runtime on Android/iOS.
       await controller.start();
       if (!mounted) return;
+      final hasPermission = controller.value.hasCameraPermission;
       setState(() {
-        _cameraReady = controller.value.hasCameraPermission;
-        if (!controller.value.hasCameraPermission) {
+        _cameraReady = hasPermission;
+        if (!hasPermission) {
           _cameraError =
-              'Permiso de cámara denegado. Usa la entrada manual o actívalo en Ajustes.';
-          _useCamera = false;
+              'No se pudo abrir la cámara. Pega el enlace a mano.';
         }
       });
     } on MobileScannerException catch (e) {
       if (!mounted) return;
+      final msg = e.errorDetails?.message ?? e.errorCode.message;
       setState(() {
-        _cameraError = e.errorDetails?.message ?? e.errorCode.message;
-        _useCamera = false;
+        _cameraError = kIsWeb
+            ? 'No se pudo abrir la cámara. Pega el enlace a mano.'
+            : (msg.isNotEmpty
+                ? msg
+                : 'No se pudo abrir la cámara. Pega el enlace a mano.');
         _cameraReady = false;
       });
       await _stopCamera();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _cameraError = '$e';
-        _useCamera = false;
+        _cameraError = kIsWeb
+            ? 'No se pudo abrir la cámara. Pega el enlace a mano.'
+            : '$e';
         _cameraReady = false;
       });
       await _stopCamera();
@@ -116,8 +185,10 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Web: leave stream to the browser / mobile_scanner; avoid churn.
+    if (kIsWeb) return;
     final controller = _controller;
-    if (controller == null || !_useCamera || kIsWeb) return;
+    if (controller == null || !_useCamera) return;
     if (!controller.value.hasCameraPermission) return;
 
     switch (state) {
@@ -139,12 +210,27 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
     setState(() {
       _useCamera = enable;
       _cameraError = null;
+      _permissionPermanentlyDenied = false;
     });
-    if (enable && !kIsWeb) {
+    if (enable) {
       await _startCamera();
     } else {
       await _stopCamera();
+      if (mounted) setState(() {});
     }
+  }
+
+  Future<void> _retryPermission() async {
+    setState(() {
+      _cameraError = null;
+      _permissionPermanentlyDenied = false;
+      _useCamera = true;
+    });
+    await _startCamera();
+  }
+
+  Future<void> _openAppSettings() async {
+    await openAppSettings();
   }
 
   @override
@@ -232,6 +318,34 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
     );
   }
 
+  Widget _cameraErrorActions() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _retryPermission,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Reintentar permiso'),
+        ),
+        if (_permissionPermanentlyDenied && !kIsWeb)
+          FilledButton.tonalIcon(
+            onPressed: _openAppSettings,
+            icon: const Icon(Icons.settings, size: 18),
+            label: const Text('Abrir ajustes'),
+          ),
+        if (kIsWeb)
+          Text(
+            'Consejo: abre la app por HTTPS (o localhost) para usar la cámara.',
+            style: TextStyle(
+              color: OlivoColors.muted.withValues(alpha: 0.9),
+              fontSize: 12,
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _cameraPreview() {
     final controller = _controller;
     if (controller == null) {
@@ -242,7 +356,28 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
           color: Colors.black12,
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const CircularProgressIndicator(),
+        child: _cameraError != null
+            ? Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.videocam_off,
+                        color: OlivoColors.warn.withValues(alpha: 0.9),
+                        size: 36),
+                    const SizedBox(height: 8),
+                    Text(
+                      _cameraError!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: OlivoColors.warn, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    _cameraErrorActions(),
+                  ],
+                ),
+              )
+            : const CircularProgressIndicator(),
       );
     }
 
@@ -262,10 +397,26 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Text(
-                        error.errorDetails?.message ?? error.errorCode.message,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            kIsWeb
+                                ? 'No se pudo abrir la cámara. Pega el enlace a mano.'
+                                : (error.errorDetails?.message ??
+                                    error.errorCode.message),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton(
+                            onPressed: _retryPermission,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Reintentar permiso'),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -307,31 +458,38 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
       appBar: AppBar(
         title: const Text('Escáner'),
         actions: [
-          if (!kIsWeb)
-            IconButton(
-              tooltip: _useCamera ? 'Entrada manual' : 'Cámara',
-              onPressed: () => _toggleCamera(!_useCamera),
-              icon: Icon(_useCamera ? Icons.keyboard : Icons.camera_alt),
-            ),
+          IconButton(
+            tooltip: _useCamera ? 'Entrada manual' : 'Cámara',
+            onPressed: () => _toggleCamera(!_useCamera),
+            icon: Icon(_useCamera ? Icons.keyboard : Icons.camera_alt),
+          ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (_cameraError != null) ...[
+          if (_cameraError != null && _useCamera && _controller != null) ...[
             Card(
               color: OlivoColors.warn.withValues(alpha: 0.12),
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: Text(
-                  _cameraError!,
-                  style: const TextStyle(color: OlivoColors.warn, fontSize: 13),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _cameraError!,
+                      style: const TextStyle(
+                          color: OlivoColors.warn, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    _cameraErrorActions(),
+                  ],
                 ),
               ),
             ),
             const FormGap(),
           ],
-          if (_useCamera && !kIsWeb) ...[
+          if (_useCamera) ...[
             _cameraPreview(),
             const FormGap(height: 16),
           ],
