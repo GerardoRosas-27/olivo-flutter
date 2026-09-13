@@ -343,6 +343,19 @@ class ScanEvent {
       );
 }
 
+
+class DeviceLocalStats {
+  const DeviceLocalStats({
+    required this.weddings,
+    required this.guests,
+    required this.users,
+  });
+
+  final int weddings;
+  final int guests;
+  final int users;
+}
+
 class AdminStats {
   const AdminStats({
     required this.guests,

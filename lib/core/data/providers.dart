@@ -78,3 +78,8 @@ final publicBaseUrlProvider =
   }
   return 'http://localhost:8080';
 });
+
+final deviceLocalStatsProvider =
+    FutureProvider.autoDispose<DeviceLocalStats>((ref) async {
+  return ref.watch(olivoRepoProvider).deviceLocalStats();
+});

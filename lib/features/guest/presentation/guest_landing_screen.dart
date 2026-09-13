@@ -361,6 +361,33 @@ class _GuestLandingScreenState extends ConsumerState<GuestLandingScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 24),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.qr_code_2, color: OlivoColors.olive, size: 22),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          partySize <= 1
+                              ? 'En la puerta muestra esta página o el código QR '
+                                  'que te enviaron: identifica tu cupo (1 persona).'
+                              : 'En la puerta muestra esta página o el código QR '
+                                  'que te enviaron: identifica tu cupo ($partySize personas).',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: OlivoColors.muted,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               const SizedBox(height: 40),
               Text(
                 'Olivo · invitación digital',

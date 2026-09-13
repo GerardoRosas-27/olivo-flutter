@@ -8,6 +8,7 @@ import '../../features/cuenta/presentation/cuenta_screen.dart';
 import '../../features/escaner/presentation/escaner_screen.dart';
 import '../../features/guest/presentation/guest_landing_screen.dart';
 import '../../features/invitados/presentation/invitados_screen.dart';
+import '../../features/marketing/presentation/product_landing_screen.dart';
 import '../../features/resumen/presentation/admin_shell.dart';
 import '../../features/resumen/presentation/resumen_screen.dart';
 import '../data/providers.dart';
@@ -15,7 +16,7 @@ import '../data/providers.dart';
 final _rootKey = GlobalKey<NavigatorState>();
 
 bool _isPublicPath(String loc) {
-  if (loc == '/login' || loc == '/') return true;
+  if (loc == '/login' || loc == '/' || loc == '/app') return true;
   if (loc.startsWith('/i/')) return true;
   return false;
 }
@@ -25,7 +26,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootKey,
-    initialLocation: '/admin',
+    initialLocation: '/',
     refreshListenable: refresh,
     redirect: (context, state) {
       final auth = ref.read(authProvider);
@@ -38,7 +39,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         if (public) return null;
         return '/login';
       }
-      if (onLogin || loc == '/') return '/admin';
+      // Autenticado: landing y login van al panel.
+      if (onLogin || loc == '/' || loc == '/app') return '/admin';
       // Old WhatsApp tab → Invitados (merged).
       if (loc == '/admin/whatsapp') return '/admin/invitados';
       return null;
@@ -46,7 +48,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/',
-        redirect: (context, state) => '/admin',
+        name: 'home',
+        builder: (context, state) => const ProductLandingScreen(),
+      ),
+      GoRoute(
+        path: '/app',
+        name: 'app',
+        builder: (context, state) => const ProductLandingScreen(),
       ),
       GoRoute(
         path: '/login',

@@ -943,6 +943,34 @@ LIMIT 40
     return DoorScanResult(outcome: outcome, guest: latest);
   }
 
+
+  /// Conteos locales del dispositivo (honestos: no son globales del servicio).
+  Future<DeviceLocalStats> deviceLocalStats() async {
+    await ensureReady();
+    if (kIsWeb) {
+      final weddings = await _webWeddings();
+      final guests = await _webGuests();
+      final users = weddings.map((w) => w.userId).toSet().length;
+      return DeviceLocalStats(
+        weddings: weddings.length,
+        guests: guests.length,
+        users: users,
+      );
+    }
+    final db = await _openDb();
+    final weddings =
+        Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM weddings')) ??
+            0;
+    final guests =
+        Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM guests')) ??
+            0;
+    final users = Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(DISTINCT user_id) FROM weddings'),
+        ) ??
+        0;
+    return DeviceLocalStats(weddings: weddings, guests: guests, users: users);
+  }
+
   Future<String?> getPublicBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('olivo.publicBaseUrl');

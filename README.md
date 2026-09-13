@@ -9,7 +9,7 @@ Cada invitado recibe un enlace único (`/i/:token`) con código QR. Desde el pan
 ## Características
 
 - Invitación personalizada por invitado (enlace + QR)
-- Envío por WhatsApp con plantilla editable (`{nombre}`, `{novios}`, `{fecha}`, `{hora}`, `{lugar}`, `{direccion}`, `{enlace}`, `{cupo}`) — integrado en Invitados
+- **Enviar invitación** (una acción): imagen QR + mensaje de plantilla con enlace `/i/{token}` vía menú de compartir (elige WhatsApp)
 - Confirmación de asistencia (RSVP sí/no)
 - Lista de invitados, grupos y aforo
 - Escáner de puerta con cupo por invitado (`partySize` / `checkedInCount`); QR **vencido** al agotar cupo
@@ -71,7 +71,7 @@ Descargas en el deploy:
 flutter build apk --release
 ```
 
-Release GitHub: tag `v1.0.3-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
+Release GitHub: tag `v1.0.4-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
 
 ### iOS
 
@@ -80,14 +80,15 @@ No hay IPA firmado en este release. El ZIP de iOS solo incluye `INSTALL_IOS.txt`
 ## Rutas
 
 ```
-/login                 → auth email-only
+/                      → página del producto (marketing + descargas)
+/app                   → mismo landing (si no hay sesión)
+/login                 → auth solo correo
 /admin                 → Resumen
 /admin/boda            → detalles de la boda
-/admin/invitados       → lista / QR / tokens
-/admin/whatsapp        → plantilla + envío
+/admin/invitados       → lista + Enviar invitación (QR imagen + plantilla)
 /admin/escaner         → check-in puerta
-/admin/cuenta          → sesión + URL pública
-/i/:token              → invitación pública del invitado
+/admin/cuenta          → sesión + URL pública (Railway)
+/i/:token              → invitación digital personalizada del invitado
 ```
 
 ## Licencia / origen

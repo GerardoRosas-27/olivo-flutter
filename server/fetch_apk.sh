@@ -2,7 +2,7 @@
 set -eu
 mkdir -p downloads
 NOTES="$(dirname "$0")/install_notes"
-TAGGED_NEW="https://github.com/GerardoRosas-27/olivo-flutter/releases/download/v1.0.3-mobile/Olivo.apk"
+TAGGED_NEW="https://github.com/GerardoRosas-27/olivo-flutter/releases/download/v1.0.4-mobile/Olivo.apk"
 LATEST="https://github.com/GerardoRosas-27/olivo-flutter/releases/latest/download/Olivo.apk"
 echo Fetching_APK
 if ! curl -fL --retry 3 --retry-delay 2 -o downloads/olivo.apk "$TAGGED_NEW"; then

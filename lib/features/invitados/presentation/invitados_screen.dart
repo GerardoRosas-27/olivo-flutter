@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/data/providers.dart';
 import '../../../core/models/models.dart';
@@ -23,11 +21,19 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
   bool _hydrated = false;
   bool _savingTpl = false;
   bool _templateExpanded = false;
+  bool _sending = false;
 
   @override
   void dispose() {
     _tpl.dispose();
     super.dispose();
+  }
+
+  Wedding _weddingWithTpl(Wedding wedding) {
+    return wedding.copyWith(
+      whatsappTemplate:
+          _tpl.text.isEmpty ? wedding.whatsappTemplate : _tpl.text,
+    );
   }
 
   Future<void> _saveTemplate(Wedding w) async {
@@ -50,42 +56,43 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
     }
   }
 
-  Future<void> _sendWhatsApp(Guest guest, Wedding wedding, String origin) async {
-    final msg = buildGuestMessage(
-      wedding.copyWith(
-        whatsappTemplate: _tpl.text.isEmpty ? wedding.whatsappTemplate : _tpl.text,
-      ),
-      guest,
-      origin,
-    );
-    final href = guest.phone.trim().isNotEmpty
-        ? whatsappHref(guest.phone, msg)
-        : whatsappShareHref(msg);
-    await launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
-    final auth = ref.read(authProvider).user!;
-    await ref.read(olivoRepoProvider).markGuestsSent(auth.userId, [guest.id]);
-    ref.invalidate(guestsProvider);
-    ref.invalidate(statsProvider);
-  }
-
-  Future<void> _shareGuest(Guest guest, Wedding wedding, String origin) async {
-    final msg = buildGuestMessage(
-      wedding.copyWith(
-        whatsappTemplate: _tpl.text.isEmpty ? wedding.whatsappTemplate : _tpl.text,
-      ),
-      guest,
-      origin,
-    );
-    final url = invitationUrl(origin, guest.token);
-    await shareInvitation(
-      text: msg,
-      url: url,
-      subject: 'Invitación — ${coupleNames(wedding)}',
-    );
-    final auth = ref.read(authProvider).user!;
-    await ref.read(olivoRepoProvider).markGuestsSent(auth.userId, [guest.id]);
-    ref.invalidate(guestsProvider);
-    ref.invalidate(statsProvider);
+  /// Una sola acción: QR (PNG de /i/{token}) + texto de plantilla con enlace.
+  Future<void> _enviarInvitacion(
+    Guest guest,
+    Wedding wedding,
+    String origin,
+  ) async {
+    if (_sending) return;
+    setState(() => _sending = true);
+    try {
+      final w = _weddingWithTpl(wedding);
+      final msg = buildGuestMessage(w, guest, origin);
+      final url = invitationUrl(origin, guest.token);
+      final result = await shareInvitation(
+        text: msg,
+        url: url,
+        subject: 'Invitación — ${coupleNames(wedding)}',
+      );
+      if (!mounted) return;
+      if (result == ShareInvitationResult.imageOnly) {
+        await offerCopyInvitationText(context, text: msg);
+      }
+      final auth = ref.read(authProvider).user!;
+      await ref.read(olivoRepoProvider).markGuestsSent(auth.userId, [guest.id]);
+      ref.invalidate(guestsProvider);
+      ref.invalidate(statsProvider);
+      if (mounted && result != ShareInvitationResult.imageOnly) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Elige WhatsApp en el menú para enviar imagen + mensaje',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   Future<void> _offerSendAfterAdd(
@@ -98,33 +105,26 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         insetPadding: kFormDialogInset,
-        title: const Text('Invitado guardado'),
+        title: const Text('¿Enviar invitación?'),
         content: Text(
-          '¿Enviar la invitación a ${guest.name} ahora?\n'
-          'El mensaje incluye el enlace. También puedes compartir la imagen del QR.',
+          'Se generará el QR de ${guest.name} y el mensaje con el enlace '
+          'público. Al compartir, elige WhatsApp para mandar la imagen y el texto.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'skip'),
             child: const Text('Después'),
           ),
-          OutlinedButton(
-            onPressed: () => Navigator.pop(ctx, 'share'),
-            child: const Text('Compartir'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, 'whatsapp'),
-            child: const Text('WhatsApp'),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, 'send'),
+            icon: const Icon(Icons.send_outlined, size: 18),
+            label: const Text('Enviar'),
           ),
         ],
       ),
     );
-    if (!mounted || action == null || action == 'skip') return;
-    if (action == 'whatsapp') {
-      await _sendWhatsApp(guest, wedding, origin);
-    } else if (action == 'share') {
-      await _shareGuest(guest, wedding, origin);
-    }
+    if (!mounted || action != 'send') return;
+    await _enviarInvitacion(guest, wedding, origin);
   }
 
   Future<void> _showGuestForm({Guest? guest}) async {
@@ -226,7 +226,11 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
     }
   }
 
-  Future<void> _showQr(Guest guest, Wedding? wedding, String origin) async {
+  Future<void> _previewGuest(
+    Guest guest,
+    Wedding? wedding,
+    String origin,
+  ) async {
     final url = invitationUrl(origin, guest.token);
     await showDialog<void>(
       context: context,
@@ -240,8 +244,8 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
             children: [
               Center(
                 child: SizedBox(
-                  width: 220,
-                  height: 220,
+                  width: 200,
+                  height: 200,
                   child: QrImageView(
                     data: url,
                     version: QrVersions.auto,
@@ -270,30 +274,24 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: url));
-              Navigator.pop(ctx);
-            },
-            child: const Text('Copiar enlace'),
-          ),
-          if (wedding != null)
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                await _shareGuest(guest, wedding, origin);
-              },
-              child: const Text('Compartir QR'),
-            ),
-          FilledButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cerrar'),
           ),
+          if (wedding != null)
+            FilledButton.icon(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _enviarInvitacion(guest, wedding, origin);
+              },
+              icon: const Icon(Icons.send_outlined, size: 18),
+              label: const Text('Enviar invitación'),
+            ),
         ],
       ),
     );
   }
 
-  Future<void> _bulkWhatsApp(
+  Future<void> _bulkEnviar(
     List<Guest> guests,
     Wedding wedding,
     String origin,
@@ -305,8 +303,8 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Enviar a todos'),
         content: Text(
-          'Se abrirá WhatsApp uno por uno (${active.length}). '
-          'Confirma cada chat en la app.',
+          'Se abrirá el menú de compartir uno por uno (${active.length}). '
+          'Elige WhatsApp en cada envío para mandar QR + mensaje.',
         ),
         actions: [
           TextButton(
@@ -322,8 +320,8 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
     );
     if (confirm != true || !mounted) return;
     for (final g in active) {
-      await _sendWhatsApp(g, wedding, origin);
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await _enviarInvitacion(g, wedding, origin);
+      await Future<void>.delayed(const Duration(milliseconds: 500));
     }
   }
 
@@ -333,9 +331,9 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
         initiallyExpanded: _templateExpanded,
         onExpansionChanged: (v) => setState(() => _templateExpanded = v),
         leading: const Icon(Icons.chat_outlined, color: OlivoColors.olive),
-        title: const Text('Plantilla WhatsApp'),
+        title: const Text('Plantilla del mensaje'),
         subtitle: const Text(
-          'Un mensaje por invitado: enlace + opción de compartir QR',
+          'Se envía junto con la imagen QR al pulsar Enviar invitación',
           style: TextStyle(fontSize: 12, color: OlivoColors.muted),
         ),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -384,13 +382,15 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
             data: (w) => w == null
                 ? const SizedBox.shrink()
                 : IconButton(
-                    tooltip: 'Enviar a todos (WhatsApp)',
-                    onPressed: () {
-                      final guests = guestsAsync.valueOrNull ?? [];
-                      final origin =
-                          originAsync.valueOrNull ?? 'http://localhost:8080';
-                      _bulkWhatsApp(guests, w, origin);
-                    },
+                    tooltip: 'Enviar a todos',
+                    onPressed: _sending
+                        ? null
+                        : () {
+                            final guests = guestsAsync.valueOrNull ?? [];
+                            final origin = originAsync.valueOrNull ??
+                                'http://localhost:8080';
+                            _bulkEnviar(guests, w, origin);
+                          },
                     icon: const Icon(Icons.campaign_outlined),
                   ),
             orElse: () => const SizedBox.shrink(),
@@ -461,73 +461,85 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
                             color: OlivoColors.muted,
                           ),
                         ),
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (v) async {
-                            final auth = ref.read(authProvider).user!;
-                            final repo = ref.read(olivoRepoProvider);
-                            switch (v) {
-                              case 'edit':
-                                await _showGuestForm(guest: g);
-                              case 'qr':
-                                await _showQr(g, wedding, origin);
-                              case 'whatsapp':
-                                if (wedding != null) {
-                                  await _sendWhatsApp(g, wedding, origin);
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (wedding != null && !g.isDiscarded)
+                              IconButton(
+                                tooltip: 'Enviar invitación',
+                                onPressed: _sending
+                                    ? null
+                                    : () => _enviarInvitacion(
+                                          g,
+                                          wedding,
+                                          origin,
+                                        ),
+                                icon: const Icon(
+                                  Icons.send_outlined,
+                                  color: OlivoColors.olive,
+                                ),
+                              ),
+                            PopupMenuButton<String>(
+                              onSelected: (v) async {
+                                final auth = ref.read(authProvider).user!;
+                                final repo = ref.read(olivoRepoProvider);
+                                switch (v) {
+                                  case 'edit':
+                                    await _showGuestForm(guest: g);
+                                  case 'send':
+                                    if (wedding != null) {
+                                      await _enviarInvitacion(
+                                        g,
+                                        wedding,
+                                        origin,
+                                      );
+                                    }
+                                  case 'checkin':
+                                    await repo.markAttendance(
+                                      auth.userId,
+                                      g.id,
+                                    );
+                                    ref.invalidate(guestsProvider);
+                                    ref.invalidate(statsProvider);
+                                  case 'regen':
+                                    await repo.regenerateToken(
+                                      auth.userId,
+                                      g.id,
+                                    );
+                                    ref.invalidate(guestsProvider);
+                                  case 'discard':
+                                    await repo.discardGuest(auth.userId, g.id);
+                                    ref.invalidate(guestsProvider);
+                                    ref.invalidate(statsProvider);
                                 }
-                              case 'share':
-                                if (wedding != null) {
-                                  await _shareGuest(g, wedding, origin);
-                                }
-                              case 'sent':
-                                await repo.markGuestsSent(auth.userId, [g.id]);
-                                ref.invalidate(guestsProvider);
-                                ref.invalidate(statsProvider);
-                              case 'checkin':
-                                await repo.markAttendance(auth.userId, g.id);
-                                ref.invalidate(guestsProvider);
-                                ref.invalidate(statsProvider);
-                              case 'regen':
-                                await repo.regenerateToken(auth.userId, g.id);
-                                ref.invalidate(guestsProvider);
-                              case 'discard':
-                                await repo.discardGuest(auth.userId, g.id);
-                                ref.invalidate(guestsProvider);
-                                ref.invalidate(statsProvider);
-                            }
-                          },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(value: 'edit', child: Text('Editar')),
-                            PopupMenuItem(
-                              value: 'qr',
-                              child: Text('QR / enlace'),
-                            ),
-                            PopupMenuItem(
-                              value: 'whatsapp',
-                              child: Text('Enviar WhatsApp'),
-                            ),
-                            PopupMenuItem(
-                              value: 'share',
-                              child: Text('Compartir (texto + QR)'),
-                            ),
-                            PopupMenuItem(
-                              value: 'sent',
-                              child: Text('Marcar enviado'),
-                            ),
-                            PopupMenuItem(
-                              value: 'checkin',
-                              child: Text('Registrar entrada (+1 cupo)'),
-                            ),
-                            PopupMenuItem(
-                              value: 'regen',
-                              child: Text('Regenerar token'),
-                            ),
-                            PopupMenuItem(
-                              value: 'discard',
-                              child: Text('Descartar'),
+                              },
+                              itemBuilder: (_) => [
+                                const PopupMenuItem(
+                                  value: 'edit',
+                                  child: Text('Editar'),
+                                ),
+                                if (wedding != null && !g.isDiscarded)
+                                  const PopupMenuItem(
+                                    value: 'send',
+                                    child: Text('Enviar invitación'),
+                                  ),
+                                const PopupMenuItem(
+                                  value: 'checkin',
+                                  child: Text('Registrar entrada (+1 cupo)'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'regen',
+                                  child: Text('Regenerar token'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'discard',
+                                  child: Text('Descartar'),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                        onTap: () => _showQr(g, wedding, origin),
+                        onTap: () => _previewGuest(g, wedding, origin),
                       ),
                     ),
                   );
