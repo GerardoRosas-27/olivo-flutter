@@ -95,7 +95,11 @@ class JsonStore {
         }
       }
       for (const g of guests) {
-        this.state.guests[g.id] = { ...g, userId, weddingId: g.weddingId || weddingId };
+        const row = { ...g, userId, weddingId: g.weddingId || weddingId };
+        // Viewing is open to any phone; cupo is door-only — never keep bind/clone flags.
+        row.cloneFlaggedAt = null;
+        row.boundDeviceId = null;
+        this.state.guests[g.id] = row;
       }
     }
     this._persist();
@@ -125,7 +129,7 @@ class JsonStore {
       remaining: Math.max(0, partySize - checkedInCount),
       rsvp: guest.rsvp || 'unknown',
       discarded: false,
-      cloned: !!guest.cloneFlaggedAt,
+      cloned: false,
       checkedIn: checkedInCount > 0 || !!guest.checkedInAt,
       checkedInCount,
       wedding: publicWedding(wedding),
@@ -138,39 +142,34 @@ class JsonStore {
     if (!guest) return { ok: false, reason: 'missing' };
     if (guest.discardedAt) return { ok: false, reason: 'discarded' };
     const now = nowIso();
-    let cloned = !!guest.cloneFlaggedAt;
-    if (guest.boundDeviceId && guest.boundDeviceId !== deviceId) {
-      cloned = true;
-      guest.cloneFlaggedAt = guest.cloneFlaggedAt || now;
-      guest.scanCount = (Number(guest.scanCount) || 0) + 1;
-    } else {
-      guest.boundDeviceId = guest.boundDeviceId || deviceId;
-      guest.firstViewedAt = guest.firstViewedAt || now;
-      guest.scanCount = (Number(guest.scanCount) || 0) + 1;
-    }
+    // QR /i/{token} must open on any phone — never bind device or flag clone.
+    guest.cloneFlaggedAt = null;
+    guest.boundDeviceId = null;
+    guest.firstViewedAt = guest.firstViewedAt || now;
+    guest.scanCount = (Number(guest.scanCount) || 0) + 1;
     this.state.guests[guest.id] = guest;
     this._addScan({
       guestId: guest.id,
       guestName: guest.name,
       kind: 'invite',
       deviceId: deviceId || '',
-      outcome: cloned ? 'cloned' : 'viewed',
+      outcome: 'viewed',
     });
     this._persist();
-    if (cloned) return { ok: false, reason: 'cloned' };
     return this.publicInvitation(token);
   }
 
   async submitRsvp(token, response, deviceId) {
-    const opened = await this.openInvitation(token, deviceId || 'rsvp');
-    if (!opened || opened.ok !== true) return opened || { ok: false, reason: 'missing' };
     const guest = await this.getGuestByToken(token);
-    if (!guest || guest.discardedAt || guest.cloneFlaggedAt) {
-      return { ok: false, reason: guest?.cloneFlaggedAt ? 'cloned' : 'missing' };
-    }
+    if (!guest) return { ok: false, reason: 'missing' };
+    if (guest.discardedAt) return { ok: false, reason: 'discarded' };
+    const now = nowIso();
+    guest.cloneFlaggedAt = null;
+    guest.boundDeviceId = null;
+    guest.firstViewedAt = guest.firstViewedAt || now;
     const rsvp = response === 'yes' || response === 'no' ? response : 'unknown';
     guest.rsvp = rsvp;
-    guest.rsvpAt = nowIso();
+    guest.rsvpAt = now;
     this.state.guests[guest.id] = guest;
     this._persist();
     const pub = await this.publicInvitation(token);
@@ -184,20 +183,20 @@ class JsonStore {
       return { outcome: 'missing' };
     }
     const now = nowIso();
+    // Cupo only — ignore legacy invite-view clone flags.
+    guest.cloneFlaggedAt = null;
     let outcome;
     if (guest.discardedAt) {
       outcome = 'discarded';
-    } else if (guest.cloneFlaggedAt) {
-      outcome = 'cloned';
     } else if ((Number(guest.checkedInCount) || 0) >= (Number(guest.partySize) || 1)) {
       outcome = 'full';
     } else {
       guest.checkedInCount = (Number(guest.checkedInCount) || 0) + 1;
       guest.checkedInAt = guest.checkedInAt || now;
       guest.scanCount = (Number(guest.scanCount) || 0) + 1;
-      this.state.guests[guest.id] = guest;
       outcome = 'checked_in';
     }
+    this.state.guests[guest.id] = guest;
     this._addScan({
       guestId: guest.id,
       guestName: guest.name,
@@ -357,6 +356,8 @@ CREATE TABLE IF NOT EXISTS scan_events (
         }
         for (const g of guests) {
           const row = { ...g, userId, weddingId: g.weddingId || weddingId };
+          row.cloneFlaggedAt = null;
+          row.boundDeviceId = null;
           await client.query(
             `INSERT INTO guests (id, user_id, wedding_id, token, data, updated_at)
              VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
@@ -414,7 +415,7 @@ CREATE TABLE IF NOT EXISTS scan_events (
       remaining: Math.max(0, partySize - checkedInCount),
       rsvp: guest.rsvp || 'unknown',
       discarded: false,
-      cloned: !!guest.cloneFlaggedAt,
+      cloned: false,
       checkedIn: checkedInCount > 0 || !!guest.checkedInAt,
       checkedInCount,
       wedding: publicWedding(wedding),
@@ -436,38 +437,33 @@ CREATE TABLE IF NOT EXISTS scan_events (
     if (!guest) return { ok: false, reason: 'missing' };
     if (guest.discardedAt) return { ok: false, reason: 'discarded' };
     const now = nowIso();
-    let cloned = !!guest.cloneFlaggedAt;
-    if (guest.boundDeviceId && guest.boundDeviceId !== deviceId) {
-      cloned = true;
-      guest.cloneFlaggedAt = guest.cloneFlaggedAt || now;
-      guest.scanCount = (Number(guest.scanCount) || 0) + 1;
-    } else {
-      guest.boundDeviceId = guest.boundDeviceId || deviceId;
-      guest.firstViewedAt = guest.firstViewedAt || now;
-      guest.scanCount = (Number(guest.scanCount) || 0) + 1;
-    }
+    // QR /i/{token} must open on any phone — never bind device or flag clone.
+    guest.cloneFlaggedAt = null;
+    guest.boundDeviceId = null;
+    guest.firstViewedAt = guest.firstViewedAt || now;
+    guest.scanCount = (Number(guest.scanCount) || 0) + 1;
     await this._saveGuest(guest);
     await this._addScan({
       guestId: guest.id,
       guestName: guest.name,
       kind: 'invite',
       deviceId: deviceId || '',
-      outcome: cloned ? 'cloned' : 'viewed',
+      outcome: 'viewed',
     });
-    if (cloned) return { ok: false, reason: 'cloned' };
     return this.publicInvitation(token);
   }
 
   async submitRsvp(token, response, deviceId) {
-    const opened = await this.openInvitation(token, deviceId || 'rsvp');
-    if (!opened || opened.ok !== true) return opened || { ok: false, reason: 'missing' };
     const guest = await this._guestRow(token);
-    if (!guest || guest.discardedAt || guest.cloneFlaggedAt) {
-      return { ok: false, reason: guest?.cloneFlaggedAt ? 'cloned' : 'missing' };
-    }
+    if (!guest) return { ok: false, reason: 'missing' };
+    if (guest.discardedAt) return { ok: false, reason: 'discarded' };
+    const now = nowIso();
+    guest.cloneFlaggedAt = null;
+    guest.boundDeviceId = null;
+    guest.firstViewedAt = guest.firstViewedAt || now;
     const rsvp = response === 'yes' || response === 'no' ? response : 'unknown';
     guest.rsvp = rsvp;
-    guest.rsvpAt = nowIso();
+    guest.rsvpAt = now;
     await this._saveGuest(guest);
     const pub = await this.publicInvitation(token);
     return { ...pub, rsvp };
@@ -479,11 +475,11 @@ CREATE TABLE IF NOT EXISTS scan_events (
     if (hostUserId && guest.userId && guest.userId !== hostUserId) {
       return { outcome: 'missing' };
     }
+    // Cupo only — ignore legacy invite-view clone flags.
+    guest.cloneFlaggedAt = null;
     let outcome;
     if (guest.discardedAt) {
       outcome = 'discarded';
-    } else if (guest.cloneFlaggedAt) {
-      outcome = 'cloned';
     } else if ((Number(guest.checkedInCount) || 0) >= (Number(guest.partySize) || 1)) {
       outcome = 'full';
     } else {
@@ -492,6 +488,10 @@ CREATE TABLE IF NOT EXISTS scan_events (
       guest.scanCount = (Number(guest.scanCount) || 0) + 1;
       await this._saveGuest(guest);
       outcome = 'checked_in';
+    }
+    // Persist cleared clone flag even when not checking in (discarded/full).
+    if (outcome !== 'checked_in') {
+      await this._saveGuest(guest);
     }
     await this._addScan({
       guestId: guest.id,

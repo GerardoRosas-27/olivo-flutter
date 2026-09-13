@@ -843,11 +843,10 @@ LIMIT 40
       final remote = await api.getPublicInvitation(token);
       // Remote hit (ok or definitive discarded/cloned) wins; missing → try local.
       if (remote != null &&
-          (remote['ok'] == true ||
-              remote['reason'] == 'discarded' ||
-              remote['reason'] == 'cloned')) {
+          (remote['ok'] == true || remote['reason'] == 'discarded')) {
         return remote;
       }
+      // Legacy servers may still return cloned — ignore and try local.
     }
     final guest = await guestByToken(token);
     if (guest == null) return {'ok': false, 'reason': 'missing'};
@@ -875,10 +874,12 @@ LIMIT 40
         open: true,
         deviceId: deviceId,
       );
-      if (remote != null &&
-          (remote['ok'] == true ||
-              remote['reason'] == 'discarded' ||
-              remote['reason'] == 'cloned')) {
+      // Prefer success / discarded; treat legacy "cloned" as non-fatal (retry local/view).
+      if (remote != null && remote['ok'] == true) return remote;
+      if (remote != null && remote['reason'] == 'discarded') return remote;
+      if (remote != null && remote['reason'] == 'cloned') {
+        // Server still on old logic — keep trying local view path below.
+      } else if (remote != null && remote['ok'] == false) {
         return remote;
       }
     }
@@ -886,22 +887,29 @@ LIMIT 40
     if (guest == null) return {'ok': false, 'reason': 'missing'};
     if (guest.isDiscarded) return {'ok': false, 'reason': 'discarded'};
 
-    var cloned = guest.isCloned;
-    Guest next;
     final now = nowIso();
-    if (guest.boundDeviceId != null && guest.boundDeviceId != deviceId) {
-      cloned = true;
-      next = guest.copyWith(
-        cloneFlaggedAt: guest.cloneFlaggedAt ?? now,
-        scanCount: guest.scanCount + 1,
-      );
-    } else {
-      next = guest.copyWith(
-        boundDeviceId: guest.boundDeviceId ?? deviceId,
-        firstViewedAt: guest.firstViewedAt ?? now,
-        scanCount: guest.scanCount + 1,
-      );
-    }
+    // Viewing never binds or flags clone; clear legacy flags so QR works on any phone.
+    final next = Guest(
+      id: guest.id,
+      weddingId: guest.weddingId,
+      name: guest.name,
+      phone: guest.phone,
+      partySize: guest.partySize,
+      groupName: guest.groupName,
+      notes: guest.notes,
+      token: guest.token,
+      rsvp: guest.rsvp,
+      rsvpAt: guest.rsvpAt,
+      sentAt: guest.sentAt,
+      firstViewedAt: guest.firstViewedAt ?? now,
+      boundDeviceId: null,
+      checkedInAt: guest.checkedInAt,
+      cloneFlaggedAt: null,
+      discardedAt: guest.discardedAt,
+      scanCount: guest.scanCount + 1,
+      checkedInCount: guest.checkedInCount,
+      createdAt: guest.createdAt,
+    );
     await _persistGuest(next);
     await _addScan(ScanEvent(
       id: newId('sc'),
@@ -909,10 +917,9 @@ LIMIT 40
       guestName: guest.name,
       kind: 'invite',
       deviceId: deviceId,
-      outcome: cloned ? 'cloned' : 'viewed',
+      outcome: 'viewed',
       createdAt: now,
     ));
-    if (cloned) return {'ok': false, 'reason': 'cloned'};
     final wedding = await weddingById(guest.weddingId);
     if (wedding == null) return {'ok': false, 'reason': 'missing'};
     return {
@@ -937,22 +944,49 @@ LIMIT 40
         response: rsvp,
         deviceId: deviceId,
       );
-      if (remote != null &&
-          (remote['ok'] == true ||
-              remote['reason'] == 'discarded' ||
-              remote['reason'] == 'cloned')) {
-        return remote;
-      }
+      if (remote != null && remote['ok'] == true) return remote;
+      if (remote != null && remote['reason'] == 'discarded') return remote;
+      // Ignore legacy cloned from old server; fall through to local update.
     }
-    final opened = await openInvitation(token, deviceId);
-    if (opened['ok'] != true) return opened;
     final guest = await guestByToken(token);
-    if (guest == null || guest.isDiscarded || guest.isCloned) {
-      return {'ok': false, 'reason': guest?.isCloned == true ? 'cloned' : 'missing'};
-    }
-    final updated = guest.copyWith(rsvp: rsvp, rsvpAt: nowIso());
+    if (guest == null) return {'ok': false, 'reason': 'missing'};
+    if (guest.isDiscarded) return {'ok': false, 'reason': 'discarded'};
+    final now = nowIso();
+    final updated = Guest(
+      id: guest.id,
+      weddingId: guest.weddingId,
+      name: guest.name,
+      phone: guest.phone,
+      partySize: guest.partySize,
+      groupName: guest.groupName,
+      notes: guest.notes,
+      token: guest.token,
+      rsvp: rsvp,
+      rsvpAt: now,
+      sentAt: guest.sentAt,
+      firstViewedAt: guest.firstViewedAt ?? now,
+      boundDeviceId: null,
+      checkedInAt: guest.checkedInAt,
+      cloneFlaggedAt: null,
+      discardedAt: guest.discardedAt,
+      scanCount: guest.scanCount,
+      checkedInCount: guest.checkedInCount,
+      createdAt: guest.createdAt,
+    );
     await _persistGuest(updated);
-    return {...opened, 'rsvp': rsvp, 'guest': updated};
+    final wedding = await weddingById(guest.weddingId);
+    if (wedding == null) return {'ok': false, 'reason': 'missing'};
+    return {
+      'ok': true,
+      'guestName': updated.name,
+      'partySize': updated.partySize,
+      'rsvp': rsvp,
+      'discarded': false,
+      'cloned': false,
+      'checkedIn': updated.isCheckedIn,
+      'wedding': wedding,
+      'guest': updated,
+    };
   }
 
   Future<DoorScanResult> scanDoor(
@@ -982,19 +1016,42 @@ LIMIT 40
     String outcome;
     Guest latest = guest;
     final now = nowIso();
-    if (guest.isDiscarded) {
+    // Cupo only — invite-view binding must never block the door.
+    if (guest.cloneFlaggedAt != null || guest.boundDeviceId != null) {
+      latest = Guest(
+        id: guest.id,
+        weddingId: guest.weddingId,
+        name: guest.name,
+        phone: guest.phone,
+        partySize: guest.partySize,
+        groupName: guest.groupName,
+        notes: guest.notes,
+        token: guest.token,
+        rsvp: guest.rsvp,
+        rsvpAt: guest.rsvpAt,
+        sentAt: guest.sentAt,
+        firstViewedAt: guest.firstViewedAt,
+        boundDeviceId: null,
+        checkedInAt: guest.checkedInAt,
+        cloneFlaggedAt: null,
+        discardedAt: guest.discardedAt,
+        scanCount: guest.scanCount,
+        checkedInCount: guest.checkedInCount,
+        createdAt: guest.createdAt,
+      );
+      await _persistGuest(latest);
+    }
+    if (latest.isDiscarded) {
       outcome = 'discarded';
-    } else if (guest.isCloned) {
-      outcome = 'cloned';
-    } else if (guest.isQuotaFull) {
+    } else if (latest.isQuotaFull) {
       // Cupo agotado — QR vencido.
       outcome = 'full';
     } else {
-      final nextCount = guest.checkedInCount + 1;
-      latest = guest.copyWith(
-        checkedInAt: guest.checkedInAt ?? now,
+      final nextCount = latest.checkedInCount + 1;
+      latest = latest.copyWith(
+        checkedInAt: latest.checkedInAt ?? now,
         checkedInCount: nextCount,
-        scanCount: guest.scanCount + 1,
+        scanCount: latest.scanCount + 1,
       );
       await _persistGuest(latest);
       outcome = 'checked_in';
@@ -1060,11 +1117,42 @@ LIMIT 40
     if (!api.isConfigured) return false;
     final wedding = await ensureWedding(userId);
     final guests = await listGuests(userId);
+    // Clear bind/clone locally and push so Railway recovers without new tokens.
+    final cleaned = <Guest>[];
+    for (final g in guests) {
+      if (g.cloneFlaggedAt != null || g.boundDeviceId != null) {
+        final c = Guest(
+          id: g.id,
+          weddingId: g.weddingId,
+          name: g.name,
+          phone: g.phone,
+          partySize: g.partySize,
+          groupName: g.groupName,
+          notes: g.notes,
+          token: g.token,
+          rsvp: g.rsvp,
+          rsvpAt: g.rsvpAt,
+          sentAt: g.sentAt,
+          firstViewedAt: g.firstViewedAt,
+          boundDeviceId: null,
+          checkedInAt: g.checkedInAt,
+          cloneFlaggedAt: null,
+          discardedAt: g.discardedAt,
+          scanCount: g.scanCount,
+          checkedInCount: g.checkedInCount,
+          createdAt: g.createdAt,
+        );
+        await _persistGuest(c);
+        cleaned.add(c);
+      } else {
+        cleaned.add(g);
+      }
+    }
     return api.syncHost(
       hostUserId: userId,
       email: email,
       wedding: wedding,
-      guests: guests,
+      guests: cleaned,
     );
   }
 

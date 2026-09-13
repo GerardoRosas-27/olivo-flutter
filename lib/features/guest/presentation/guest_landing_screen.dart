@@ -46,7 +46,10 @@ class _GuestLandingScreenState extends ConsumerState<GuestLandingScreen> {
     });
     final id = await deviceId();
     final opened = await repo.openInvitation(widget.token, id);
-    if (mounted) setState(() => _result = opened);
+    // Analytics open must not replace a successful peek with a legacy "cloned" error.
+    if (mounted && opened['ok'] == true) {
+      setState(() => _result = opened);
+    }
   }
 
   Future<void> _rsvp(String status) async {

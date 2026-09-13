@@ -5,7 +5,7 @@ Invitaciones digitales de boda — migración multipuerto de [olivo](https://git
 Cada invitado recibe un enlace único (`/i/:token`) con código QR. Desde el panel se arma la boda, se envían invitaciones por WhatsApp, se recogen confirmaciones (RSVP) y se controla el acceso en la puerta (escáner).
 
 **Repositorio:** https://github.com/GerardoRosas-27/olivo-flutter  
-**Release móvil:** [v1.1.0-mobile](https://github.com/GerardoRosas-27/olivo-flutter/releases/tag/v1.1.0-mobile)
+**Release móvil:** [v1.1.1-mobile](https://github.com/GerardoRosas-27/olivo-flutter/releases/tag/v1.1.1-mobile)
 
 ## Características
 
@@ -14,7 +14,7 @@ Cada invitado recibe un enlace único (`/i/:token`) con código QR. Desde el pan
 - Confirmación de asistencia (RSVP sí/no) vía API pública
 - Lista de invitados, grupos y aforo
 - Escáner de puerta con cupo por invitado (`partySize` / `checkedInCount`); QR **vencido** al agotar cupo
-- Detección de enlaces compartidos / clonados (device binding)
+- QR `/i/{token}` abre en cualquier teléfono; el cupo se controla solo en el Escáner de puerta
 - Login admin **solo con correo** (sin contraseña), sesión local
 - **Sync a Railway**: invitaciones públicas funcionan en **cualquier teléfono**
 - Persistencia local: **SQLite** (móvil/escritorio) / SharedPreferences JSON (web)
@@ -32,7 +32,7 @@ Cada invitado recibe un enlace único (`/i/:token`) con código QR. Desde el pan
 | `PUT/POST` | `/api/host/sync` | Auth `Bearer <hostUserId>` — upsert boda + invitados |
 | `GET` | `/api/public/invitation/:token` | Datos públicos de la invitación (o 404) |
 | `POST` | `/api/public/rsvp` | `{ token, response, deviceId }` |
-| `POST` | `/api/door/scan` | `{ token, hostUserId, deviceId }` → `checked_in` \| `full` \| `cloned` \| `missing` |
+| `POST` | `/api/door/scan` | `{ token, hostUserId, deviceId }` → `checked_in` \| `full` \| `discarded` \| `missing` |
 | `GET` | `/api/health` | Health |
 
 Store: **`DATABASE_URL`** (Postgres) si está definida; si no, JSON en **`/data/olivo.json`** (o `./data`).
@@ -65,7 +65,7 @@ cd server && npm i && node server.js
 2. Builder **DOCKERFILE** (`railway.toml`).
 3. Multi-stage: Flutter web → `node:20-alpine` + Express + API + `fetch_apk.sh`.
 4. **URL pública** en la app: **Cuenta →** `https://olivo-flutter-production.up.railway.app` (o tu dominio).
-5. Tras el deploy: **crea de nuevo los invitados**, o pulsa **Sincronizar invitaciones** (Cuenta / Invitados) para subir los que ya tienes en el dispositivo.
+5. Tras el deploy: reabre el mismo `/i/{token}` (limpia flags viejos) o pulsa **Sincronizar invitaciones** (Cuenta / Invitados) para subir invitados y limpiar `cloneFlaggedAt` / `boundDeviceId` en Railway.
 
 ### Volumen (recomendado)
 
@@ -103,7 +103,7 @@ Los datos viejos solo viven en el teléfono/navegador. Para que el QR abra en ot
 flutter build apk --release
 ```
 
-Release GitHub: tag `v1.1.0-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
+Release GitHub: tag `v1.1.1-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
 
 ### iOS
 
