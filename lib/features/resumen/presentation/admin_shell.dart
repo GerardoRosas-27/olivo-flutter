@@ -12,7 +12,6 @@ class AdminShell extends StatelessWidget {
     (Icons.dashboard_outlined, Icons.dashboard, 'Resumen'),
     (Icons.favorite_border, Icons.favorite, 'Boda'),
     (Icons.people_outline, Icons.people, 'Invitados'),
-    (Icons.chat_outlined, Icons.chat, 'WhatsApp'),
     (Icons.qr_code_scanner, Icons.qr_code_scanner, 'Escáner'),
     (Icons.person_outline, Icons.person, 'Cuenta'),
   ];

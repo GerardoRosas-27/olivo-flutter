@@ -9,13 +9,13 @@ Cada invitado recibe un enlace único (`/i/:token`) con código QR. Desde el pan
 ## Características
 
 - Invitación personalizada por invitado (enlace + QR)
-- Envío por WhatsApp con plantilla editable (`{nombre}`, `{novios}`, `{fecha}`, `{lugar}`, `{enlace}`)
+- Envío por WhatsApp con plantilla editable (`{nombre}`, `{novios}`, `{fecha}`, `{hora}`, `{lugar}`, `{direccion}`, `{enlace}`, `{cupo}`) — integrado en Invitados
 - Confirmación de asistencia (RSVP sí/no)
 - Lista de invitados, grupos y aforo
-- Escáner de puerta (cámara QR en móvil y web HTTPS; token manual de respaldo)
+- Escáner de puerta con cupo por invitado (`partySize` / `checkedInCount`); QR **vencido** al agotar cupo
 - Detección de enlaces compartidos / clonados (device binding)
 - Login admin **solo con correo** (sin contraseña), sesión local
-- Secciones admin: **Resumen**, **Boda**, **Invitados**, **WhatsApp**, **Escáner**, **Cuenta**
+- Secciones admin: **Resumen**, **Boda**, **Invitados** (CRUD + plantilla WhatsApp), **Escáner**, **Cuenta**
 - Persistencia local: **SQLite** (móvil/escritorio) / SharedPreferences JSON (web)
 - Seed demo: Ana & Mateo, tokens `demo-ana` y `demo-clone`
 
@@ -71,7 +71,7 @@ Descargas en el deploy:
 flutter build apk --release
 ```
 
-Release GitHub: tag `v1.0.2-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
+Release GitHub: tag `v1.0.3-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
 
 ### iOS
 

@@ -33,7 +33,7 @@ class OlivoRepository {
     final path = p.join(dir.path, 'olivo.db');
     _db = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, _) async {
         await db.execute('''
 CREATE TABLE sessions (
@@ -80,6 +80,7 @@ CREATE TABLE guests (
   clone_flagged_at TEXT,
   discarded_at TEXT,
   scan_count INTEGER NOT NULL DEFAULT 0,
+  checked_in_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 )''');
         await db.execute(
@@ -95,6 +96,17 @@ CREATE TABLE scan_events (
   created_at TEXT NOT NULL
 )''');
         await _seedSqlite(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+            'ALTER TABLE guests ADD COLUMN checked_in_count INTEGER NOT NULL DEFAULT 0',
+          );
+          await db.execute(
+            'UPDATE guests SET checked_in_count = 1 '
+            'WHERE checked_in_at IS NOT NULL AND checked_in_count = 0',
+          );
+        }
       },
     );
     return _db!;
@@ -136,6 +148,7 @@ CREATE TABLE scan_events (
       'token': 'demo-ana',
       'rsvp': 'unknown',
       'scan_count': 0,
+      'checked_in_count': 0,
       'created_at': now,
     });
     await db.insert('guests', {
@@ -149,6 +162,7 @@ CREATE TABLE scan_events (
       'token': 'demo-clone',
       'rsvp': 'unknown',
       'scan_count': 0,
+      'checked_in_count': 0,
       'created_at': now,
     });
   }
@@ -197,6 +211,7 @@ CREATE TABLE scan_events (
         token: 'demo-ana',
         rsvp: 'unknown',
         scanCount: 0,
+        checkedInCount: 0,
         createdAt: now,
       ),
       Guest(
@@ -210,6 +225,7 @@ CREATE TABLE scan_events (
         token: 'demo-clone',
         rsvp: 'unknown',
         scanCount: 0,
+        checkedInCount: 0,
         createdAt: now,
       ),
     ];
@@ -507,6 +523,8 @@ CREATE TABLE scan_events (
       cloneFlaggedAt: row['clone_flagged_at'] as String?,
       discardedAt: row['discarded_at'] as String?,
       scanCount: (row['scan_count'] as num?)?.toInt() ?? 0,
+      checkedInCount: (row['checked_in_count'] as num?)?.toInt() ??
+          ((row['checked_in_at'] != null) ? 1 : 0),
       createdAt: row['created_at'] as String? ?? '',
     );
   }
@@ -536,7 +554,7 @@ CREATE TABLE scan_events (
       if (g.firstViewedAt != null) viewed++;
       if (g.rsvp == 'yes') confirmed++;
       if (g.rsvp == 'no') declined++;
-      if (g.checkedInAt != null) checkedIn++;
+      if (g.checkedInCount > 0 || g.checkedInAt != null) checkedIn++;
       if (g.cloneFlaggedAt != null) clones++;
       if (g.discardedAt == null) expected += g.partySize;
     }
@@ -572,6 +590,7 @@ CREATE TABLE scan_events (
       token: newToken(),
       rsvp: 'unknown',
       scanCount: 0,
+      checkedInCount: 0,
       createdAt: nowIso(),
     );
     if (kIsWeb) {
@@ -592,6 +611,7 @@ CREATE TABLE scan_events (
       'token': guest.token,
       'rsvp': guest.rsvp,
       'scan_count': 0,
+      'checked_in_count': 0,
       'created_at': guest.createdAt,
     });
     return guest;
@@ -650,6 +670,7 @@ CREATE TABLE scan_events (
         'clone_flagged_at': g.cloneFlaggedAt,
         'discarded_at': g.discardedAt,
         'scan_count': g.scanCount,
+        'checked_in_count': g.checkedInCount,
       },
       where: 'id = ?',
       whereArgs: [g.id],
@@ -705,6 +726,7 @@ CREATE TABLE scan_events (
       cloneFlaggedAt: null,
       discardedAt: null,
       scanCount: 0,
+      checkedInCount: 0,
       createdAt: existing.createdAt,
     );
     await _persistGuest(updated);
@@ -714,8 +736,13 @@ CREATE TABLE scan_events (
   Future<Guest> markAttendance(String userId, String id) async {
     final existing = await _ownedGuest(userId, id);
     if (existing == null) throw StateError('Invitado no encontrado');
-    final updated =
-        existing.copyWith(checkedInAt: existing.checkedInAt ?? nowIso());
+    if (existing.isQuotaFull) return existing;
+    final nextCount = existing.checkedInCount + 1;
+    final updated = existing.copyWith(
+      checkedInAt: existing.checkedInAt ?? nowIso(),
+      checkedInCount: nextCount,
+      scanCount: existing.scanCount + 1,
+    );
     await _persistGuest(updated);
     return updated;
   }
@@ -891,11 +918,14 @@ LIMIT 40
       outcome = 'discarded';
     } else if (guest.isCloned) {
       outcome = 'cloned';
-    } else if (guest.isCheckedIn) {
-      outcome = 'already_in';
+    } else if (guest.isQuotaFull) {
+      // Cupo agotado — QR vencido.
+      outcome = 'full';
     } else {
+      final nextCount = guest.checkedInCount + 1;
       latest = guest.copyWith(
-        checkedInAt: now,
+        checkedInAt: guest.checkedInAt ?? now,
+        checkedInCount: nextCount,
         scanCount: guest.scanCount + 1,
       );
       await _persistGuest(latest);

@@ -23,6 +23,10 @@ String coupleNames(Wedding wedding) {
       .join(' & ');
 }
 
+final _templatePlaceholder = RegExp(
+  r'\{nombre\}|\{novios\}|\{fecha\}|\{hora\}|\{lugar\}|\{direccion\}|\{enlace\}|\{cupo\}',
+);
+
 String buildGuestMessage(Wedding wedding, Guest guest, String origin) {
   final template =
       wedding.whatsappTemplate.isEmpty ? defaultTemplate : wedding.whatsappTemplate;
@@ -30,11 +34,14 @@ String buildGuestMessage(Wedding wedding, Guest guest, String origin) {
     '{nombre}': guest.name,
     '{novios}': coupleNames(wedding),
     '{fecha}': formatWeddingDate(wedding.weddingDate),
+    '{hora}': wedding.weddingTime,
     '{lugar}': wedding.venueName,
+    '{direccion}': wedding.venueAddress,
     '{enlace}': invitationUrl(origin, guest.token),
+    '{cupo}': '${guest.partySize}',
   };
   return template.replaceAllMapped(
-    RegExp(r'\{nombre\}|\{novios\}|\{fecha\}|\{lugar\}|\{enlace\}'),
+    _templatePlaceholder,
     (m) => map[m.group(0)!] ?? m.group(0)!,
   );
 }
@@ -47,7 +54,15 @@ String whatsappDigits(String phone) {
 
 String whatsappHref(String phone, String text) {
   final digits = whatsappDigits(phone);
+  if (digits.isEmpty) {
+    return 'https://wa.me/?text=${Uri.encodeComponent(text)}';
+  }
   return 'https://wa.me/$digits?text=${Uri.encodeComponent(text)}';
+}
+
+/// Generic WhatsApp share (no phone) — opens chat picker with prefilled text.
+String whatsappShareHref(String text) {
+  return 'https://wa.me/?text=${Uri.encodeComponent(text)}';
 }
 
 String tokenFromScan(String raw) {

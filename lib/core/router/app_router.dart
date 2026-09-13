@@ -10,7 +10,6 @@ import '../../features/guest/presentation/guest_landing_screen.dart';
 import '../../features/invitados/presentation/invitados_screen.dart';
 import '../../features/resumen/presentation/admin_shell.dart';
 import '../../features/resumen/presentation/resumen_screen.dart';
-import '../../features/whatsapp/presentation/whatsapp_screen.dart';
 import '../data/providers.dart';
 
 final _rootKey = GlobalKey<NavigatorState>();
@@ -40,6 +39,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return '/login';
       }
       if (onLogin || loc == '/') return '/admin';
+      // Old WhatsApp tab → Invitados (merged).
+      if (loc == '/admin/whatsapp') return '/admin/invitados';
       return null;
     },
     routes: [
@@ -89,15 +90,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/admin/invitados',
                 name: 'invitados',
                 builder: (context, state) => const InvitadosScreen(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/admin/whatsapp',
-                name: 'whatsapp',
-                builder: (context, state) => const WhatsappScreen(),
               ),
             ],
           ),

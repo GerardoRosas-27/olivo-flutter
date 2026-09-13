@@ -168,6 +168,7 @@ class Guest {
     this.cloneFlaggedAt,
     this.discardedAt,
     required this.scanCount,
+    required this.checkedInCount,
     required this.createdAt,
   });
 
@@ -188,11 +189,16 @@ class Guest {
   final String? cloneFlaggedAt;
   final String? discardedAt;
   final int scanCount;
+  /// Successful door check-ins against [partySize] cupo.
+  final int checkedInCount;
   final String createdAt;
 
   bool get isDiscarded => discardedAt != null;
   bool get isCloned => cloneFlaggedAt != null;
-  bool get isCheckedIn => checkedInAt != null;
+  bool get isCheckedIn => checkedInAt != null || checkedInCount > 0;
+  bool get isQuotaFull => checkedInCount >= partySize;
+  bool get hasPartialCheckIn =>
+      checkedInCount > 0 && checkedInCount < partySize;
 
   Guest copyWith({
     String? name,
@@ -210,6 +216,7 @@ class Guest {
     String? cloneFlaggedAt,
     String? discardedAt,
     int? scanCount,
+    int? checkedInCount,
   }) {
     return Guest(
       id: id,
@@ -229,6 +236,7 @@ class Guest {
       cloneFlaggedAt: cloneFlaggedAt ?? this.cloneFlaggedAt,
       discardedAt: discardedAt ?? this.discardedAt,
       scanCount: scanCount ?? this.scanCount,
+      checkedInCount: checkedInCount ?? this.checkedInCount,
       createdAt: createdAt,
     );
   }
@@ -251,38 +259,48 @@ class Guest {
         'cloneFlaggedAt': cloneFlaggedAt,
         'discardedAt': discardedAt,
         'scanCount': scanCount,
+        'checkedInCount': checkedInCount,
         'createdAt': createdAt,
       };
 
-  factory Guest.fromJson(Map<String, dynamic> j) => Guest(
-        id: j['id'] as String,
-        weddingId: j['weddingId'] as String? ?? j['wedding_id'] as String? ?? '',
-        name: j['name'] as String? ?? '',
-        phone: j['phone'] as String? ?? '',
-        partySize: (j['partySize'] as num?)?.toInt() ??
-            (j['party_size'] as num?)?.toInt() ??
-            1,
-        groupName: j['groupName'] as String? ?? j['group_name'] as String? ?? '',
-        notes: j['notes'] as String? ?? '',
-        token: j['token'] as String? ?? '',
-        rsvp: j['rsvp'] as String? ?? 'unknown',
-        rsvpAt: j['rsvpAt'] as String? ?? j['rsvp_at'] as String?,
-        sentAt: j['sentAt'] as String? ?? j['sent_at'] as String?,
-        firstViewedAt:
-            j['firstViewedAt'] as String? ?? j['first_viewed_at'] as String?,
-        boundDeviceId:
-            j['boundDeviceId'] as String? ?? j['bound_device_id'] as String?,
-        checkedInAt:
-            j['checkedInAt'] as String? ?? j['checked_in_at'] as String?,
-        cloneFlaggedAt:
-            j['cloneFlaggedAt'] as String? ?? j['clone_flagged_at'] as String?,
-        discardedAt:
-            j['discardedAt'] as String? ?? j['discarded_at'] as String?,
-        scanCount: (j['scanCount'] as num?)?.toInt() ??
-            (j['scan_count'] as num?)?.toInt() ??
-            0,
-        createdAt: j['createdAt'] as String? ?? j['created_at'] as String? ?? '',
-      );
+  factory Guest.fromJson(Map<String, dynamic> j) {
+    final party = (j['partySize'] as num?)?.toInt() ??
+        (j['party_size'] as num?)?.toInt() ??
+        1;
+    final checkedInAt =
+        j['checkedInAt'] as String? ?? j['checked_in_at'] as String?;
+    var checkedInCount = (j['checkedInCount'] as num?)?.toInt() ??
+        (j['checked_in_count'] as num?)?.toInt();
+    // Legacy: if checked in but no count stored, treat as 1 toward cupo.
+    checkedInCount ??= (checkedInAt != null ? 1 : 0);
+    return Guest(
+      id: j['id'] as String,
+      weddingId: j['weddingId'] as String? ?? j['wedding_id'] as String? ?? '',
+      name: j['name'] as String? ?? '',
+      phone: j['phone'] as String? ?? '',
+      partySize: party,
+      groupName: j['groupName'] as String? ?? j['group_name'] as String? ?? '',
+      notes: j['notes'] as String? ?? '',
+      token: j['token'] as String? ?? '',
+      rsvp: j['rsvp'] as String? ?? 'unknown',
+      rsvpAt: j['rsvpAt'] as String? ?? j['rsvp_at'] as String?,
+      sentAt: j['sentAt'] as String? ?? j['sent_at'] as String?,
+      firstViewedAt:
+          j['firstViewedAt'] as String? ?? j['first_viewed_at'] as String?,
+      boundDeviceId:
+          j['boundDeviceId'] as String? ?? j['bound_device_id'] as String?,
+      checkedInAt: checkedInAt,
+      cloneFlaggedAt:
+          j['cloneFlaggedAt'] as String? ?? j['clone_flagged_at'] as String?,
+      discardedAt:
+          j['discardedAt'] as String? ?? j['discarded_at'] as String?,
+      scanCount: (j['scanCount'] as num?)?.toInt() ??
+          (j['scan_count'] as num?)?.toInt() ??
+          0,
+      checkedInCount: checkedInCount,
+      createdAt: j['createdAt'] as String? ?? j['created_at'] as String? ?? '',
+    );
+  }
 }
 
 class ScanEvent {
@@ -350,7 +368,8 @@ class AdminStats {
 class DoorScanResult {
   const DoorScanResult({required this.outcome, this.guest});
 
-  final String outcome; // checked_in | already_in | cloned | discarded | missing
+  /// checked_in | already_in | full | cloned | discarded | missing
+  final String outcome;
   final Guest? guest;
 }
 
@@ -373,10 +392,14 @@ const defaultTemplate = '''Hola {nombre},
 Con mucho cariño te invitamos a nuestra boda.
 
 {novios}
-{fecha} · {lugar}
+{fecha} · {hora}
+{lugar}
+{direccion}
 
-Tu invitación personal está aquí:
+Tu invitación digital (enlace + QR en la página):
 {enlace}
+
+Cupo: {cupo} persona(s)
 
 Esperamos verte.''';
 

@@ -265,7 +265,7 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
   Color _outcomeColor(String o) {
     return switch (o) {
       'checked_in' => OlivoColors.olive,
-      'already_in' => OlivoColors.warn,
+      'already_in' || 'full' => OlivoColors.warn,
       'cloned' || 'discarded' || 'missing' => OlivoColors.danger,
       _ => OlivoColors.muted,
     };
@@ -275,12 +275,20 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
     return switch (o) {
       'checked_in' => 'Entrada registrada',
       'already_in' => 'Ya había entrado',
+      'full' => 'Cupo agotado · QR vencido',
       'cloned' => 'Enlace clonado',
       'discarded' => 'Invitación descartada',
       'missing' => 'Token no encontrado',
       _ => o,
     };
   }
+
+  String _eventKindLabel(String k) => switch (k) {
+        'door' => 'Puerta',
+        'invite' => 'Invitación',
+        'discard' => 'Descarte',
+        _ => k,
+      };
 
   Widget _manualEntry() {
     return Column(
@@ -453,6 +461,7 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
   @override
   Widget build(BuildContext context) {
     final scansAsync = ref.watch(scansProvider);
+    final guestsAsync = ref.watch(guestsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -518,7 +527,8 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
                       const SizedBox(height: 4),
                       Text(_last!.guest!.name),
                       Text(
-                        'Grupo: ${_last!.guest!.groupName.isEmpty ? '—' : _last!.guest!.groupName} · x${_last!.guest!.partySize}',
+                        'Grupo: ${_last!.guest!.groupName.isEmpty ? '—' : _last!.guest!.groupName}'
+                        ' · cupo ${_last!.guest!.checkedInCount}/${_last!.guest!.partySize}',
                         style: const TextStyle(
                             color: OlivoColors.muted, fontSize: 13),
                       ),
@@ -528,6 +538,60 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
               ),
             ),
           ],
+          const SizedBox(height: 24),
+          Text('Invitados en puerta',
+              style: Theme.of(context).textTheme.titleMedium),
+          const FormGap(height: 8),
+          guestsAsync.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (e, _) => Text('$e'),
+            data: (guests) {
+              final scanned = guests
+                  .where((g) => !g.isDiscarded && g.checkedInCount > 0)
+                  .toList()
+                ..sort((a, b) =>
+                    b.checkedInCount.compareTo(a.checkedInCount));
+              if (scanned.isEmpty) {
+                return const Text(
+                  'Nadie ha entrado aún',
+                  style: TextStyle(color: OlivoColors.subtle),
+                );
+              }
+              return Column(
+                children: [
+                  for (final g in scanned)
+                    ListTile(
+                      dense: true,
+                      leading: Icon(
+                        g.isQuotaFull
+                            ? Icons.verified
+                            : Icons.hourglass_bottom,
+                        size: 20,
+                        color: g.isQuotaFull
+                            ? OlivoColors.olive
+                            : OlivoColors.warn,
+                      ),
+                      title: Text(g.name),
+                      subtitle: Text(
+                        g.isQuotaFull
+                            ? 'Cupo completo · QR vencido'
+                            : 'Parcial · ${g.checkedInCount} de ${g.partySize}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      trailing: Text(
+                        '${g.checkedInCount}/${g.partySize}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: g.isQuotaFull
+                              ? OlivoColors.olive
+                              : OlivoColors.warn,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 24),
           Text('Últimos eventos',
               style: Theme.of(context).textTheme.titleMedium),
@@ -551,7 +615,7 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
                         color: OlivoColors.olive,
                       ),
                       title: Text(e.guestName),
-                      subtitle: Text('${e.kind} · ${e.outcome}'),
+                      subtitle: Text('${_eventKindLabel(e.kind)} · ${_outcomeLabel(e.outcome)}'),
                       trailing: Text(
                         e.createdAt.length > 16
                             ? e.createdAt.substring(11, 16)
