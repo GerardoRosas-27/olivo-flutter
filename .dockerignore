@@ -26,3 +26,7 @@ analysis_options.yaml
 .dockerignore
 Dockerfile
 railway.toml
+
+server/node_modules
+server/data
+**/node_modules

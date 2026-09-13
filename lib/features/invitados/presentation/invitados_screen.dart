@@ -393,6 +393,28 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
       appBar: AppBar(
         title: const Text('Invitados'),
         actions: [
+          IconButton(
+            tooltip: 'Sincronizar con Railway',
+            onPressed: () async {
+              final auth = ref.read(authProvider).user;
+              if (auth == null) return;
+              final ok = await ref.read(olivoRepoProvider).syncToServer(
+                    auth.userId,
+                    email: auth.email,
+                  );
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    ok
+                        ? 'Invitados sincronizados — los QR ya abren en cualquier teléfono'
+                        : 'Sync falló. Guarda la URL pública en Cuenta.',
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.cloud_upload_outlined),
+          ),
           weddingAsync.maybeWhen(
             data: (w) => w == null
                 ? const SizedBox.shrink()

@@ -8,12 +8,15 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../models/models.dart';
 import '../../utils/ids.dart';
+import '../api/olivo_api.dart';
 
-/// Persistencia local: SQLite (móvil/escritorio) o SharedPreferences JSON (web).
-/// Futuro: Postgres remoto — ver README.
+/// Persistencia local + sync a API Railway (invitaciones públicas / escáner).
+/// Local: SQLite (móvil/escritorio) o SharedPreferences JSON (web).
+/// Remoto: PUT /api/host/sync → GET /api/public/invitation/:token.
 class OlivoRepository {
-  OlivoRepository();
+  OlivoRepository({OlivoApi? api}) : api = api ?? OlivoApi();
 
+  final OlivoApi api;
   Database? _db;
   bool _ready = false;
 
@@ -476,6 +479,7 @@ CREATE TABLE scan_events (
       final list = await _webWeddings();
       final next = list.map((x) => x.id == w.id ? w : x).toList();
       await _saveWebWeddings(next);
+      await _syncQuiet(userId);
       return w;
     }
     final db = await _openDb();
@@ -500,6 +504,7 @@ CREATE TABLE scan_events (
       where: 'id = ? AND user_id = ?',
       whereArgs: [current.id, userId],
     );
+    await _syncQuiet(userId);
     return w;
   }
 
@@ -597,6 +602,7 @@ CREATE TABLE scan_events (
       final list = await _webGuests();
       list.add(guest);
       await _saveWebGuests(list);
+      await _syncQuiet(userId);
       return guest;
     }
     final db = await _openDb();
@@ -614,6 +620,7 @@ CREATE TABLE scan_events (
       'checked_in_count': 0,
       'created_at': guest.createdAt,
     });
+    await _syncQuiet(userId);
     return guest;
   }
 
@@ -641,6 +648,7 @@ CREATE TABLE scan_events (
       notes: notes.trim(),
     );
     await _persistGuest(updated);
+    await _syncQuiet(userId);
     return updated;
   }
 
@@ -685,6 +693,7 @@ CREATE TABLE scan_events (
       if (g.sentAt != null) continue;
       await _persistGuest(g.copyWith(sentAt: now));
     }
+    await _syncQuiet(userId);
   }
 
   Future<Guest> discardGuest(String userId, String id) async {
@@ -702,6 +711,7 @@ CREATE TABLE scan_events (
       outcome: 'discarded',
       createdAt: now,
     ));
+    await _syncQuiet(userId);
     return updated;
   }
 
@@ -730,6 +740,7 @@ CREATE TABLE scan_events (
       createdAt: existing.createdAt,
     );
     await _persistGuest(updated);
+    await _syncQuiet(userId);
     return updated;
   }
 
@@ -744,6 +755,7 @@ CREATE TABLE scan_events (
       scanCount: existing.scanCount + 1,
     );
     await _persistGuest(updated);
+    await _syncQuiet(userId);
     return updated;
   }
 
@@ -824,8 +836,19 @@ LIMIT 40
     return _weddingFromRow(rows.first);
   }
 
-  /// Peek without binding device.
+  /// Peek without binding device. Prefers Railway API so any phone can open /i/:token.
   Future<Map<String, dynamic>> peekInvitation(String token) async {
+    await ensureApiBase();
+    if (api.isConfigured) {
+      final remote = await api.getPublicInvitation(token);
+      // Remote hit (ok or definitive discarded/cloned) wins; missing → try local.
+      if (remote != null &&
+          (remote['ok'] == true ||
+              remote['reason'] == 'discarded' ||
+              remote['reason'] == 'cloned')) {
+        return remote;
+      }
+    }
     final guest = await guestByToken(token);
     if (guest == null) return {'ok': false, 'reason': 'missing'};
     if (guest.isDiscarded) return {'ok': false, 'reason': 'discarded'};
@@ -845,6 +868,20 @@ LIMIT 40
   }
 
   Future<Map<String, dynamic>> openInvitation(String token, String deviceId) async {
+    await ensureApiBase();
+    if (api.isConfigured) {
+      final remote = await api.getPublicInvitation(
+        token,
+        open: true,
+        deviceId: deviceId,
+      );
+      if (remote != null &&
+          (remote['ok'] == true ||
+              remote['reason'] == 'discarded' ||
+              remote['reason'] == 'cloned')) {
+        return remote;
+      }
+    }
     final guest = await guestByToken(token);
     if (guest == null) return {'ok': false, 'reason': 'missing'};
     if (guest.isDiscarded) return {'ok': false, 'reason': 'discarded'};
@@ -893,6 +930,20 @@ LIMIT 40
 
   Future<Map<String, dynamic>> submitRsvp(
       String token, String deviceId, String rsvp) async {
+    await ensureApiBase();
+    if (api.isConfigured) {
+      final remote = await api.submitRsvp(
+        token: token,
+        response: rsvp,
+        deviceId: deviceId,
+      );
+      if (remote != null &&
+          (remote['ok'] == true ||
+              remote['reason'] == 'discarded' ||
+              remote['reason'] == 'cloned')) {
+        return remote;
+      }
+    }
     final opened = await openInvitation(token, deviceId);
     if (opened['ok'] != true) return opened;
     final guest = await guestByToken(token);
@@ -906,6 +957,23 @@ LIMIT 40
 
   Future<DoorScanResult> scanDoor(
       String userId, String token, String deviceId) async {
+    await ensureApiBase();
+    if (api.isConfigured) {
+      final remote = await api.doorScan(
+        token: token,
+        hostUserId: userId,
+        deviceId: deviceId,
+      );
+      if (remote != null && remote.outcome != 'missing') {
+        if (remote.guest != null) {
+          try {
+            await _persistGuest(remote.guest!);
+          } catch (_) {}
+        }
+        return remote;
+      }
+      // outcome missing or null → try local (offline demo / not yet synced)
+    }
     final wedding = await ensureWedding(userId);
     final guest = await guestByToken(token);
     if (guest == null || guest.weddingId != wedding.id) {
@@ -969,6 +1037,43 @@ LIMIT 40
         ) ??
         0;
     return DeviceLocalStats(weddings: weddings, guests: guests, users: users);
+  }
+
+
+  /// Resolve API base from stored public URL (or same origin on web).
+  Future<void> ensureApiBase() async {
+    var base = await getPublicBaseUrl();
+    if ((base == null || base.isEmpty) && kIsWeb) {
+      if (Uri.base.hasScheme &&
+          (Uri.base.scheme == 'http' || Uri.base.scheme == 'https')) {
+        base = '${Uri.base.scheme}://${Uri.base.host}'
+            '${Uri.base.hasPort ? ':${Uri.base.port}' : ''}';
+      }
+    }
+    api.setBaseUrl(base);
+  }
+
+  /// Push local wedding + guests to Railway so /i/{token} works on any phone.
+  Future<bool> syncToServer(String userId, {String? email}) async {
+    await ensureReady();
+    await ensureApiBase();
+    if (!api.isConfigured) return false;
+    final wedding = await ensureWedding(userId);
+    final guests = await listGuests(userId);
+    return api.syncHost(
+      hostUserId: userId,
+      email: email,
+      wedding: wedding,
+      guests: guests,
+    );
+  }
+
+  Future<void> _syncQuiet(String userId) async {
+    try {
+      await syncToServer(userId);
+    } catch (e) {
+      debugPrint('sync quiet: $e');
+    }
   }
 
   Future<String?> getPublicBaseUrl() async {

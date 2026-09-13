@@ -93,9 +93,17 @@ class _GuestLandingScreenState extends ConsumerState<GuestLandingScreen> {
     if (result['ok'] != true) {
       return _Blocked(reason: result['reason'] as String? ?? 'missing');
     }
-    final wedding = result['wedding'] as Wedding;
+    final weddingRaw = result['wedding'];
+    final Wedding wedding;
+    if (weddingRaw is Wedding) {
+      wedding = weddingRaw;
+    } else if (weddingRaw is Map) {
+      wedding = Wedding.fromJson(Map<String, dynamic>.from(weddingRaw));
+    } else {
+      return const _Blocked(reason: 'missing');
+    }
     final guestName = result['guestName'] as String? ?? '';
-    final partySize = result['partySize'] as int? ?? 1;
+    final partySize = (result['partySize'] as num?)?.toInt() ?? 1;
     final current = result['rsvp'] as String? ?? 'unknown';
     final couple = coupleNames(wedding);
     final date = formatWeddingDate(wedding.weddingDate);

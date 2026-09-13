@@ -17,11 +17,38 @@ class CuentaScreen extends ConsumerStatefulWidget {
 class _CuentaScreenState extends ConsumerState<CuentaScreen> {
   final _baseUrl = TextEditingController();
   bool _hydrated = false;
+  bool _syncing = false;
 
   @override
   void dispose() {
     _baseUrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _syncNow() async {
+    final auth = ref.read(authProvider).user;
+    if (auth == null) return;
+    setState(() => _syncing = true);
+    try {
+      await ref.read(olivoRepoProvider).setPublicBaseUrl(_baseUrl.text);
+      ref.invalidate(publicBaseUrlProvider);
+      final ok = await ref.read(olivoRepoProvider).syncToServer(
+            auth.userId,
+            email: auth.email,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? 'Boda e invitados sincronizados en Railway. Los QR /i/{token} ya funcionan en cualquier teléfono.'
+                : 'No se pudo sincronizar. Revisa la URL pública y la red.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
   }
 
   @override
@@ -45,17 +72,22 @@ class _CuentaScreenState extends ConsumerState<CuentaScreen> {
             child: ListTile(
               leading: const Icon(Icons.email_outlined),
               title: Text(auth.user?.email ?? '—'),
-              subtitle: const Text('Login local solo con correo (sin contraseña)'),
+              subtitle: Text(
+                'Host ID: ${auth.user?.userId ?? '—'}',
+                style: const TextStyle(fontSize: 12),
+              ),
             ),
           ),
           const SizedBox(height: 16),
-          Text('URL pública (Railway)', style: Theme.of(context).textTheme.titleMedium),
+          Text('URL pública (Railway)',
+              style: Theme.of(context).textTheme.titleMedium),
           const FormGap(),
           TextField(
             controller: _baseUrl,
             decoration: const InputDecoration(
-              hintText: 'https://tu-app.up.railway.app',
-              helperText: 'Se usa en enlaces /i/:token y mensajes WhatsApp',
+              hintText: 'https://olivo-flutter-production.up.railway.app',
+              helperText:
+                  'Base de enlaces /i/:token, WhatsApp y API de invitaciones',
             ),
           ),
           const FormGap(),
@@ -69,6 +101,24 @@ class _CuentaScreenState extends ConsumerState<CuentaScreen> {
               );
             },
             child: const Text('Guardar URL'),
+          ),
+          const FormGap(),
+          FilledButton.tonalIcon(
+            onPressed: _syncing ? null : _syncNow,
+            icon: _syncing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_upload_outlined),
+            label: Text(_syncing ? 'Sincronizando…' : 'Sincronizar invitaciones'),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Tras crear o editar invitados, pulsa sincronizar (o envía una '
+            'invitación) para que el QR funcione en otro teléfono.',
+            style: TextStyle(color: OlivoColors.muted, fontSize: 13),
           ),
           const SizedBox(height: 24),
           Text('Descargas', style: Theme.of(context).textTheme.titleMedium),
@@ -99,9 +149,10 @@ class _CuentaScreenState extends ConsumerState<CuentaScreen> {
                       style: TextStyle(fontWeight: FontWeight.w600)),
                   SizedBox(height: 8),
                   Text(
-                    'Hoy: SQLite local (móvil/escritorio) y SharedPreferences JSON en web. '
-                    'Futuro: Postgres (Neon/Railway) para sesión multi-dispositivo y sync — '
-                    'misma forma de tablas weddings/guests/scan_events/sessions.',
+                    'Local: SQLite (móvil) / SharedPreferences (web).\n'
+                    'Servidor (Railway): JSON en volumen /data o Postgres si '
+                    'hay DATABASE_URL. La API pública sirve /i/{token} y el '
+                    'escáner de puerta con cupo.',
                     style: TextStyle(color: OlivoColors.muted, fontSize: 13),
                   ),
                 ],
