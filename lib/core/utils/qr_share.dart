@@ -39,21 +39,88 @@ Future<Uint8List?> renderQrPng(String data, {double size = 512}) async {
 
 /// Result of sharing an invitation (QR image + template text).
 enum ShareInvitationResult {
-  /// System share sheet opened with image + text (ideal for WhatsApp).
+  /// System share sheet opened with image + text in one shot (mobile/desktop).
   imageAndText,
+  /// Two-step: QR image first, then template text + link (web, or mobile fallback).
+  twoStep,
   /// Only the QR image was shared; caller should offer copying the text.
   imageOnly,
   /// Text-only share (no QR file available).
   textOnly,
 }
 
+Future<XFile> _qrFile(Uint8List bytes, String url) async {
+  if (kIsWeb) {
+    return XFile.fromData(
+      bytes,
+      mimeType: 'image/png',
+      name: 'invitacion-qr.png',
+    );
+  }
+  final dir = await getTemporaryDirectory();
+  final path = '${dir.path}/olivo-qr-${url.hashCode.abs()}.png';
+  final disk = File(path);
+  await disk.writeAsBytes(bytes, flush: true);
+  return XFile(path, mimeType: 'image/png', name: 'invitacion-qr.png');
+}
+
+/// Confirm between the two share steps (web / fallback).
+Future<void> _confirmTwoStep(BuildContext? context) async {
+  if (context == null || !context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Paso 1/2 listo'),
+      content: const Text(
+        'Paso 1/2: comparte el QR. Luego Paso 2/2: el mensaje con el enlace.\n\n'
+        'Ahora se enviará el mensaje con el enlace.',
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Continuar'),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Two-step share: (1) QR image only, (2) template text + public link.
+Future<ShareInvitationResult> _shareTwoStep({
+  required XFile file,
+  required String text,
+  String? subject,
+  BuildContext? context,
+}) async {
+  await SharePlus.instance.share(
+    ShareParams(
+      subject: subject,
+      files: [file],
+    ),
+  );
+  final ctx = context;
+  if (ctx != null && ctx.mounted) {
+    await _confirmTwoStep(ctx);
+  }
+  await SharePlus.instance.share(
+    ShareParams(text: text, subject: subject),
+  );
+  return ShareInvitationResult.twoStep;
+}
+
 /// Share invitation: QR PNG encoding [url] plus [text] via the system share sheet.
-/// Prefer image+text together so the user can pick WhatsApp and send both.
-/// `wa.me` cannot attach images — this uses Android/iOS share intents instead.
+///
+/// **Web (`kIsWeb`):** always two-step — image first, then text+link (WhatsApp
+/// twice). Do not rely on a single image+text share.
+///
+/// **Mobile/desktop:** try image+text in one share; if that fails, same two-step
+/// as web. `wa.me` cannot attach images — uses share intents instead.
 Future<ShareInvitationResult> shareInvitation({
   required String text,
   required String url,
   String? subject,
+  BuildContext? context,
 }) async {
   final bytes = await renderQrPng(url);
   if (bytes == null) {
@@ -63,22 +130,34 @@ Future<ShareInvitationResult> shareInvitation({
     return ShareInvitationResult.textOnly;
   }
 
-  XFile file;
+  final file = await _qrFile(bytes, url);
+
+  // Web: always two-step (image, then text). Combined share is unreliable.
   if (kIsWeb) {
-    file = XFile.fromData(
-      bytes,
-      mimeType: 'image/png',
-      name: 'invitacion-qr.png',
-    );
-  } else {
-    final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/olivo-qr-${url.hashCode.abs()}.png';
-    final disk = File(path);
-    await disk.writeAsBytes(bytes, flush: true);
-    file = XFile(path, mimeType: 'image/png', name: 'invitacion-qr.png');
+    try {
+      final webCtx = context;
+      return await _shareTwoStep(
+        file: file,
+        text: text,
+        subject: subject,
+        context: (webCtx != null && webCtx.mounted) ? webCtx : null,
+      );
+    } catch (_) {
+      try {
+        await SharePlus.instance.share(
+          ShareParams(subject: subject, files: [file]),
+        );
+        return ShareInvitationResult.imageOnly;
+      } catch (_) {
+        await SharePlus.instance.share(
+          ShareParams(text: text, subject: subject),
+        );
+        return ShareInvitationResult.textOnly;
+      }
+    }
   }
 
-  // Primary: image + text in one share (WhatsApp receives both when supported).
+  // Mobile/desktop: prefer image + text in one share.
   try {
     await SharePlus.instance.share(
       ShareParams(
@@ -89,20 +168,27 @@ Future<ShareInvitationResult> shareInvitation({
     );
     return ShareInvitationResult.imageAndText;
   } catch (_) {
-    // Secondary: share image alone, then let caller offer copying the text.
+    // Fallback: same two-step as web.
     try {
-      await SharePlus.instance.share(
-        ShareParams(
-          subject: subject,
-          files: [file],
-        ),
+      final fbCtx = context;
+      return await _shareTwoStep(
+        file: file,
+        text: text,
+        subject: subject,
+        context: (fbCtx != null && fbCtx.mounted) ? fbCtx : null,
       );
-      return ShareInvitationResult.imageOnly;
     } catch (_) {
-      await SharePlus.instance.share(
-        ShareParams(text: text, subject: subject),
-      );
-      return ShareInvitationResult.textOnly;
+      try {
+        await SharePlus.instance.share(
+          ShareParams(subject: subject, files: [file]),
+        );
+        return ShareInvitationResult.imageOnly;
+      } catch (_) {
+        await SharePlus.instance.share(
+          ShareParams(text: text, subject: subject),
+        );
+        return ShareInvitationResult.textOnly;
+      }
     }
   }
 }

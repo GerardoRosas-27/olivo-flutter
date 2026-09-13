@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -56,7 +57,8 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
     }
   }
 
-  /// Una sola acción: QR (PNG de /i/{token}) + texto de plantilla con enlace.
+  /// Envía invitación: QR (PNG de /i/{token}) + texto de plantilla con enlace.
+  /// En web es siempre en dos pasos (dos envíos a WhatsApp).
   Future<void> _enviarInvitacion(
     Guest guest,
     Wedding wedding,
@@ -72,6 +74,7 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
         text: msg,
         url: url,
         subject: 'Invitación — ${coupleNames(wedding)}',
+        context: context,
       );
       if (!mounted) return;
       if (result == ShareInvitationResult.imageOnly) {
@@ -81,7 +84,16 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
       await ref.read(olivoRepoProvider).markGuestsSent(auth.userId, [guest.id]);
       ref.invalidate(guestsProvider);
       ref.invalidate(statsProvider);
-      if (mounted && result != ShareInvitationResult.imageOnly) {
+      if (!mounted) return;
+      if (result == ShareInvitationResult.twoStep) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'En web: elige WhatsApp dos veces — 1) imagen QR, 2) mensaje con enlace',
+            ),
+          ),
+        );
+      } else if (result != ShareInvitationResult.imageOnly) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -107,8 +119,11 @@ class _InvitadosScreenState extends ConsumerState<InvitadosScreen> {
         insetPadding: kFormDialogInset,
         title: const Text('¿Enviar invitación?'),
         content: Text(
-          'Se generará el QR de ${guest.name} y el mensaje con el enlace '
-          'público. Al compartir, elige WhatsApp para mandar la imagen y el texto.',
+          kIsWeb
+              ? 'Se generará el QR de ${guest.name} y el mensaje con el enlace '
+                  'público. En web: elige WhatsApp dos veces (1 imagen QR, 2 mensaje).'
+              : 'Se generará el QR de ${guest.name} y el mensaje con el enlace '
+                  'público. Al compartir, elige WhatsApp para mandar la imagen y el texto.',
         ),
         actions: [
           TextButton(

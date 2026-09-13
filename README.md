@@ -9,7 +9,7 @@ Cada invitado recibe un enlace único (`/i/:token`) con código QR. Desde el pan
 ## Características
 
 - Invitación personalizada por invitado (enlace + QR)
-- **Enviar invitación** (una acción): imagen QR + mensaje de plantilla con enlace `/i/{token}` vía menú de compartir (elige WhatsApp)
+- **Enviar invitación**: imagen QR + mensaje de plantilla con enlace `/i/{token}` vía menú de compartir (elige WhatsApp). En **web** son dos pasos (imagen, luego texto)
 - Confirmación de asistencia (RSVP sí/no)
 - Lista de invitados, grupos y aforo
 - Escáner de puerta con cupo por invitado (`partySize` / `checkedInCount`); QR **vencido** al agotar cupo
@@ -71,7 +71,7 @@ Descargas en el deploy:
 flutter build apk --release
 ```
 
-Release GitHub: tag `v1.0.4-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
+Release GitHub: tag `v1.0.5-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
 
 ### iOS
 

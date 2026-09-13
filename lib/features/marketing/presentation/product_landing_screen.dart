@@ -11,7 +11,7 @@ import '../../../core/widgets/form_gap.dart';
 class ProductLandingScreen extends ConsumerWidget {
   const ProductLandingScreen({super.key});
 
-  static const releaseTag = 'v1.0.4-mobile';
+  static const releaseTag = 'v1.0.5-mobile';
   static const _repo =
       'https://github.com/GerardoRosas-27/olivo-flutter/releases/download';
 
