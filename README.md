@@ -5,7 +5,7 @@ Invitaciones digitales de boda — migración multipuerto de [olivo](https://git
 Cada invitado recibe un enlace único (`/i/:token`) con código QR. Desde el panel se arma la boda, se envían invitaciones por WhatsApp, se recogen confirmaciones (RSVP) y se controla el acceso en la puerta (escáner).
 
 **Repositorio:** https://github.com/GerardoRosas-27/olivo-flutter  
-**Release móvil:** [v1.1.2-mobile](https://github.com/GerardoRosas-27/olivo-flutter/releases/tag/v1.1.2-mobile)
+**Release móvil:** [v1.1.3-mobile](https://github.com/GerardoRosas-27/olivo-flutter/releases/tag/v1.1.3-mobile)
 
 ## Características
 
@@ -104,7 +104,7 @@ Los datos viejos solo viven en el teléfono/navegador. Para que el QR abra en ot
 flutter build apk --release
 ```
 
-Release GitHub: tag `v1.1.2-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
+Release GitHub: tag `v1.1.3-mobile` con `Olivo.apk`, `Olivo-android.zip`, `Olivo-ios.zip`.
 
 ### iOS
 

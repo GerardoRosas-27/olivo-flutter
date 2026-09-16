@@ -82,6 +82,57 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
     return false;
   }
 
+
+  /// Never surface raw Java/Kotlin NPEs or obfuscated R8 frames to the user.
+  String _friendlyCameraError([Object? error]) {
+    if (kIsWeb) {
+      return 'No se pudo abrir la cámara. Pega el enlace a mano.';
+    }
+
+    if (error is MobileScannerException) {
+      if (error.errorCode == MobileScannerErrorCode.permissionDenied) {
+        return _permissionPermanentlyDenied
+            ? 'Permiso de cámara denegado permanentemente. Ábrelo en Ajustes o usa la entrada manual.'
+            : 'Permiso de cámara denegado. Usa «Reintentar permiso» o la entrada manual.';
+      }
+    }
+
+    final raw = switch (error) {
+      MobileScannerException e =>
+        (e.errorDetails?.message ?? e.errorCode.message).trim(),
+      _ => (error?.toString() ?? '').trim(),
+    };
+    final lower = raw.toLowerCase();
+
+    if (lower.contains('permission') || lower.contains('denied')) {
+      return _permissionPermanentlyDenied
+          ? 'Permiso de cámara denegado permanentemente. Ábrelo en Ajustes o usa la entrada manual.'
+          : 'Permiso de cámara denegado. Usa «Reintentar permiso» o la entrada manual.';
+    }
+
+    // Platform / R8 / ML Kit internals (e.g. "Attempt to invoke virtual method … on a null object reference")
+    if (lower.contains('null object reference') ||
+        lower.contains('nullpointer') ||
+        lower.contains('attempt to invoke') ||
+        lower.contains('platformexception') ||
+        lower.contains('missingpluginexception') ||
+        lower.contains('controllerdisposed') ||
+        lower.contains('no camera') ||
+        raw.contains('Exception') ||
+        raw.contains('Error:')) {
+      return 'No se pudo iniciar la cámara. Prueba «Reintentar permiso» o usa la entrada manual.';
+    }
+
+    if (raw.isNotEmpty &&
+        raw.length <= 140 &&
+        !raw.contains('\n') &&
+        !RegExp(r'\b[a-z]\d+\.[a-z]').hasMatch(lower)) {
+      return raw;
+    }
+
+    return 'No se pudo abrir la cámara. Prueba de nuevo o usa la entrada manual.';
+  }
+
   Future<void> _startCamera() async {
     await _stopCamera();
     if (!mounted) return;
@@ -127,32 +178,40 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
     try {
       await controller.start();
       if (!mounted) return;
+      // mobile_scanner swallows MobileScannerException into value.error (no throw).
+      final startError = controller.value.error;
+      if (startError != null) {
+        setState(() {
+          _cameraError = _friendlyCameraError(startError);
+          _cameraReady = false;
+        });
+        await _stopCamera();
+        return;
+      }
       final hasPermission = controller.value.hasCameraPermission;
       setState(() {
-        _cameraReady = hasPermission;
+        _cameraReady = hasPermission && controller.value.isRunning;
         if (!hasPermission) {
-          _cameraError =
-              'No se pudo abrir la cámara. Pega el enlace a mano.';
+          _cameraError = _friendlyCameraError(
+            MobileScannerException(
+              errorCode: MobileScannerErrorCode.permissionDenied,
+            ),
+          );
+        } else if (!controller.value.isRunning) {
+          _cameraError = _friendlyCameraError();
         }
       });
     } on MobileScannerException catch (e) {
       if (!mounted) return;
-      final msg = e.errorDetails?.message ?? e.errorCode.message;
       setState(() {
-        _cameraError = kIsWeb
-            ? 'No se pudo abrir la cámara. Pega el enlace a mano.'
-            : (msg.isNotEmpty
-                ? msg
-                : 'No se pudo abrir la cámara. Pega el enlace a mano.');
+        _cameraError = _friendlyCameraError(e);
         _cameraReady = false;
       });
       await _stopCamera();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _cameraError = kIsWeb
-            ? 'No se pudo abrir la cámara. Pega el enlace a mano.'
-            : '$e';
+        _cameraError = _friendlyCameraError(e);
         _cameraReady = false;
       });
       await _stopCamera();
@@ -189,7 +248,13 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
     if (kIsWeb) return;
     final controller = _controller;
     if (controller == null || !_useCamera) return;
-    if (!controller.value.hasCameraPermission) return;
+    // Permission dialogs and failed starts leave the controller uninitialized
+    // or with an error — do not churn start/stop in those states.
+    if (!controller.value.isInitialized ||
+        controller.value.error != null ||
+        !controller.value.hasCameraPermission) {
+      return;
+    }
 
     switch (state) {
       case AppLifecycleState.resumed:
@@ -416,10 +481,7 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            kIsWeb
-                                ? 'No se pudo abrir la cámara. Pega el enlace a mano.'
-                                : (error.errorDetails?.message ??
-                                    error.errorCode.message),
+                            _friendlyCameraError(error),
                             textAlign: TextAlign.center,
                             style: const TextStyle(color: Colors.white),
                           ),
