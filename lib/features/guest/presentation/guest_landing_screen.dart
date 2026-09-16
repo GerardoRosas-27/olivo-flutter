@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -114,6 +115,12 @@ class _GuestLandingScreenState extends ConsumerState<GuestLandingScreen> {
       if (date.isNotEmpty) date,
       if (wedding.weddingTime.isNotEmpty) wedding.weddingTime,
     ].join(' · ');
+    final origin = (Uri.base.hasScheme &&
+            (Uri.base.scheme == 'http' || Uri.base.scheme == 'https'))
+        ? '${Uri.base.scheme}://${Uri.base.host}'
+            '${Uri.base.hasPort ? ':${Uri.base.port}' : ''}'
+        : 'http://localhost:8080';
+    final inviteUrl = invitationUrl(origin, widget.token);
 
     return Scaffold(
       body: Center(
@@ -122,6 +129,90 @@ class _GuestLandingScreenState extends ConsumerState<GuestLandingScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 40, 20, 56),
             children: [
+              Text(
+                'ESTA ES TU INVITACIÓN',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  letterSpacing: 2.5,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: OlivoColors.olive,
+                ),
+              ),
+              const SizedBox(height: 6),
+              if (guestName.isNotEmpty)
+                Text(
+                  guestName,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              const SizedBox(height: 20),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: OlivoColors.bg,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: OlivoColors.border),
+                  ),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        width: 200,
+                        height: 200,
+                        child: QrImageView(
+                          data: inviteUrl,
+                          version: QrVersions.auto,
+                          backgroundColor: OlivoColors.bg,
+                          eyeStyle: const QrEyeStyle(
+                            eyeShape: QrEyeShape.square,
+                            color: OlivoColors.fg,
+                          ),
+                          dataModuleStyle: const QrDataModuleStyle(
+                            dataModuleShape: QrDataModuleShape.square,
+                            color: OlivoColors.fg,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Pase de entrada',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: OlivoColors.fg,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        partySize <= 1
+                            ? 'Cupo: 1 persona'
+                            : 'Cupo: $partySize personas',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: OlivoColors.olive,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        partySize <= 1
+                            ? 'Muéstralo en la puerta para registrar tu entrada.'
+                            : 'Muéstralo en la puerta. Cada escaneo usa 1 de tus $partySize cupos.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: OlivoColors.muted,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
               Text(
                 'CON ALEGRÍA TE INVITAMOS',
                 textAlign: TextAlign.center,
@@ -368,33 +459,6 @@ class _GuestLandingScreenState extends ConsumerState<GuestLandingScreen> {
                           label: const Text('Cómo llegar (mapa)'),
                         ),
                       ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.qr_code_2, color: OlivoColors.olive, size: 22),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          partySize <= 1
-                              ? 'En la puerta muestra esta página o el código QR '
-                                  'que te enviaron: identifica tu cupo (1 persona).'
-                              : 'En la puerta muestra esta página o el código QR '
-                                  'que te enviaron: identifica tu cupo ($partySize personas).',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: OlivoColors.muted,
-                            height: 1.4,
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),

@@ -275,11 +275,18 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
     return switch (o) {
       'checked_in' => 'Entrada registrada',
       'already_in' => 'Ya había entrado',
-      'full' => 'Cupo agotado · QR vencido',
+      'full' => 'Los cupos de esta invitación ya fueron escaneados',
       'cloned' => 'Enlace clonado',
       'discarded' => 'Invitación descartada',
       'missing' => 'Token no encontrado',
       _ => o,
+    };
+  }
+
+  String? _outcomeDetail(String o) {
+    return switch (o) {
+      'full' => 'No se permite la entrada a más personas.',
+      _ => null,
     };
   }
 
@@ -520,11 +527,24 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
                       _outcomeLabel(_last!.outcome),
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
+                        fontSize: 16,
                         color: _outcomeColor(_last!.outcome),
                       ),
                     ),
+                    if (_outcomeDetail(_last!.outcome) != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _outcomeDetail(_last!.outcome)!,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: _outcomeColor(_last!.outcome),
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
                     if (_last!.guest != null) ...[
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 8),
                       Text(_last!.guest!.name),
                       Text(
                         'Grupo: ${_last!.guest!.groupName.isEmpty ? '—' : _last!.guest!.groupName}'
@@ -574,7 +594,7 @@ class _EscanerScreenState extends ConsumerState<EscanerScreen>
                       title: Text(g.name),
                       subtitle: Text(
                         g.isQuotaFull
-                            ? 'Cupo completo · QR vencido'
+                            ? 'Cupos ya escaneados · sin entrada adicional'
                             : 'Parcial · ${g.checkedInCount} de ${g.partySize}',
                         style: const TextStyle(fontSize: 12),
                       ),
